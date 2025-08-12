@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rummy Royale</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="table-top">
+             <!-- Opponent Areas will be dynamically added here -->
+             <div id="table-center">
+                <div class="text-center">
+                    <p class="font-semibold mb-1">Deck</p>
+                    <div id="deck-pile" class="card card-back cursor-pointer"></div>
+                </div>
+                <div class="text-center">
+                    <p class="font-semibold mb-1">Discard</p>
+                    <div id="discard-pile" class="placeholder"></div>
+                </div>
+                 <div class="text-center">
+                    <p class="font-semibold mb-1">Wildcard</p>
+                    <div id="wildcard-pile" class="placeholder"></div>
+                </div>
+             </div>
+        </div>
+        <div class="player-area p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h2 id="current-player-name" class="text-2xl font-semibold">Player's Hand</h2>
+                <div id="action-buttons" class="flex gap-2">
+                    <button id="sort-btn" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition">Sort</button>
+                    <button id="declare-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition disabled:bg-gray-500" disabled>Declare</button>
+                </div>
+            </div>
+             <div id="player-hand-wrapper">
+                <div id="grouped-cards"></div>
+                <div id="ungrouped-cards"></div>
+                <div id="grouping-actions" class="hidden flex gap-2 mt-2">
+                    <button id="group-set-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Group as Set</button>
+                    <button id="group-seq-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Group as Sequence</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen Modal -->
+    <div id="start-screen" class="modal-overlay flex-col">
+         <h1 class="text-6xl font-bold mb-8 text-white drop-shadow-lg">Rummy Royale</h1>
+         <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-sm">
+            <div class="mb-4">
+                <label for="player-name" class="block text-lg font-medium mb-2">Player Name</label>
+                <input type="text" id="player-name" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500" value="Player 1">
+            </div>
+            <div class="mb-6">
+                <label for="num-players" class="block text-lg font-medium mb-2">Players (2-7)</label>
+                <input type="number" id="num-players" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500" value="2" min="2" max="7">
+            </div>
+            <button id="start-game-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 transform hover:scale-105">Start Game</button>
+        </div>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="message-modal" class="modal-overlay hidden">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md text-center">
+            <h2 id="message-modal-title" class="text-3xl font-bold mb-4"></h2>
+            <p id="message-modal-body" class="text-lg mb-6"></p>
+            <div id="message-modal-footer">
+                <button id="message-modal-close-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-8 rounded-lg">OK</button>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/script.js"></script>
+</body>
+</html>
