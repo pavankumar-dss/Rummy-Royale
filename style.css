@@ -1,0 +1,138 @@
+body {
+            font-family: 'Inter', sans-serif;
+            background-color: #166534;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%2315803d' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E");
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        #game-container {
+            display: grid;
+            grid-template-rows: 1fr auto;
+            height: 100vh;
+        }
+        #table-top {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .card {
+            width: 80px;
+            height: 120px;
+            border-radius: 8px;
+            background-color: #f9fafb;
+            border: 1px solid #9ca3af;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 4px;
+            font-size: 20px;
+            font-weight: 600;
+            cursor: grab;
+            transition: all 0.2s;
+            user-select: none;
+            position: relative;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .card:hover {
+            transform: translateY(-8px) rotate(2deg);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+        .card.selected {
+            transform: translateY(-12px);
+            border: 2px solid #3b82f6;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.7);
+        }
+        .card.dragging {
+            opacity: 0.5;
+        }
+        .card .value { align-self: flex-start; }
+        .card .suit { font-size: 28px; align-self: center; margin-top: -10px; }
+        .card .value-bottom { align-self: flex-end; transform: rotate(180deg); }
+        .card.hearts, .card.diamonds { color: #ef4444; }
+        .card.spades, .card.clubs { color: #1f2937; }
+        .card.joker { 
+            background: linear-gradient(145deg, #7c3aed, #a855f7); 
+            color: #f0abfc; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+        }
+        .card-back {
+            background-color: #4f46e5;
+            background-image: repeating-linear-gradient(45deg, #6366f1 25%, transparent 25%, transparent 75%, #6366f1 75%, #6366f1), repeating-linear-gradient(-45deg, #6366f1 25%, transparent 25%, transparent 75%, #6366f1 75%, #6366f1);
+            background-size: 20px 20px;
+            border: 2px solid #3730a3;
+        }
+        .placeholder {
+            width: 80px;
+            height: 120px;
+            border-radius: 8px;
+            border: 2px dashed #4ade80;
+            background-color: rgba(22, 163, 74, 0.5);
+        }
+        .player-area {
+            background-color: rgba(17, 94, 54, 0.5);
+            backdrop-filter: blur(4px);
+            border-top: 1px solid rgba(74, 222, 128, 0.3);
+        }
+        #player-hand-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+        }
+        #ungrouped-cards, #grouped-cards {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            width: 100%;
+        }
+        .meld-group {
+            display: flex;
+            gap: 0.25rem;
+            padding: 0.5rem;
+            border: 2px solid #4ade80;
+            border-radius: 0.5rem;
+            background-color: rgba(22, 163, 74, 0.5);
+        }
+        .opponent-area {
+            position: absolute;
+            transform: translateX(-50%);
+        }
+        #opponent-area-top { top: 20px; left: 50%; }
+        .opponent-fan {
+            position: relative;
+            width: 200px;
+            height: 100px;
+        }
+        .opponent-fan .card {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform-origin: bottom center;
+        }
+        #table-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
