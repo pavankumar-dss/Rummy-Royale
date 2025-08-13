@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rummy Royale</title>
-    <link href="output.css" rel="stylesheet">
+    <!-- Link to your CSS file -->
+    <link href="assets/css/style.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -12,7 +13,6 @@
 
     <div id="game-container">
         <div id="table-top">
-             <!-- Opponent Areas will be dynamically added here -->
              <div id="table-center">
                 <div class="text-center">
                     <p class="font-semibold mb-1">Deck</p>
@@ -63,6 +63,29 @@
         </div>
     </div>
 
+    <!-- Declare Modal -->
+    <div id="declare-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="flex-shrink-0">
+                <h2 class="text-3xl font-bold text-center mb-2">Arrange Your Melds</h2>
+                <p class="text-center text-gray-400 mb-4">Drag cards into groups to form sets and sequences.</p>
+            </div>
+            <div class="modal-scroll-container">
+                <div id="declare-hand-source" class="flex justify-center flex-wrap gap-2 p-4 mb-4 bg-gray-800 rounded-lg min-h-[140px]"></div>
+                <div id="meld-groups-container">
+                    <div class="meld-group" data-group-id="1"></div>
+                    <div class="meld-group" data-group-id="2"></div>
+                    <div class="meld-group" data-group-id="3"></div>
+                    <div class="meld-group" data-group-id="4"></div>
+                </div>
+            </div>
+            <div class="flex justify-center gap-4 mt-4 flex-shrink-0">
+                <button id="validate-show-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg">Validate Show</button>
+                <button id="cancel-declare-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Message Modal -->
     <div id="message-modal" class="modal-overlay hidden">
         <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md text-center">
@@ -73,7 +96,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Link to your JavaScript file -->
     <script src="assets/js/script.js"></script>
 </body>
 </html>
-
