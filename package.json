@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A simple Rummy card game.",
   "scripts": {
-    "build": "tailwindcss -i ./assets/css/style.css -o ./dist/output.css"
+    "build": "tailwindcss -i ./assets/css/style.css -o ./dist/output.css && cp index.html dist/ && cp -r assets/js dist/assets"
   },
   "dependencies": {
     "tailwindcss": "^3.4.1"
