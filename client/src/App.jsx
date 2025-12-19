@@ -6,7 +6,7 @@ import { DndContext, closestCenter, MouseSensor, TouchSensor, useSensor, useSens
 import { SortableContext, horizontalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // --- Sortable Card Wrapper ---
 const SortableCard = ({ card, onClick, disabled }) => {
@@ -44,6 +44,7 @@ function App() {
   const [gameState, setGameState] = useState(null);
   const [roomId, setRoomId] = useState(null);
   const [myPlayerIndex, setMyPlayerIndex] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(30);
   const [activeId, setActiveId] = useState(null); // For drag overlay
   const [sortState, setSortState] = useState('suit'); // 'suit' or 'value'
 
@@ -55,15 +56,34 @@ function App() {
             const res = await axios.get(`${API_URL}/game/${roomId}`);
             setGameState(prev => {
                 const newState = res.data;
-                if (!prev) return newState;
-                // Ideally we merge state to avoid jitter, but for now simplified overwrite is okay 
-                // as long as we don't block user interaction.
+                // Sync Timer
+                if (newState.status === 'PLAYING') {
+                    const deadline = newState.turnDeadline;
+                    const serverNow = newState.serverTime; // Approximate sync
+                    const diff =  Math.max(0, Math.ceil((deadline - (Date.now() + (serverNow - Date.now()))) / 1000));
+                    // Simplified: Just use local time diff from deadline if clocks are close, or rely on serverTime delta.
+                    // Let's rely on backend relative time: deadline - serverTime = remaining time at that snapshot.
+                    // But we want it to tick down.
+                    // Better: deadline is absolute server time. We calculate local remaining time.
+                    // We assume small clock drift or just use the snapshot.
+                    const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+                   setTimeLeft(remaining);
+                }
                 return newState; 
             });
         } catch (err) { console.error(err); }
-    }, 2000);
+    }, 1000); // Poll faster for timer? 1s is okay.
     return () => clearInterval(interval);
   }, [roomId]);
+
+  // Local Ticker for smooth countdown between polls
+  useEffect(() => {
+      if (!gameState || gameState.status !== 'PLAYING') return;
+      const timer = setInterval(() => {
+          setTimeLeft(prev => Math.max(0, prev - 1));
+      }, 1000);
+      return () => clearInterval(timer);
+  }, [gameState?.currentPlayerIndex]); // Reset on turn change
 
   const onJoinGame = (room, pIndex) => {
       setRoomId(room);
@@ -100,6 +120,15 @@ function App() {
       } catch (err) { alert(err.response?.data?.error); }
   };
 
+  const handleShow = async () => {
+      if (!isMyTurn) return;
+      if (!confirm("Are you sure you want to Show your hand? ensures you have valid sets/sequences!")) return;
+      try {
+          const res = await axios.post(`${API_URL}/game/${roomId}/show`, { playerIndex: myPlayerIndex });
+          setGameState(res.data);
+      } catch (err) { alert(err.response?.data?.error); }
+  };
+
   const sortHand = () => {
       setGameState(prev => {
           if (!prev) return null;
@@ -119,6 +148,13 @@ function App() {
           
           const newPlayers = [...prev.players];
           newPlayers[myPlayerIndex] = { ...player, hand: newHand };
+
+          // Persist to Server
+          axios.post(`${API_URL}/game/${roomId}/reorder`, { 
+              playerIndex: myPlayerIndex, 
+              newHand 
+          }).catch(err => console.error("Failed to save sort", err));
+
           return { ...prev, players: newPlayers };
       });
   };
@@ -138,6 +174,13 @@ function App() {
               
               const newPlayers = [...prev.players];
               newPlayers[myPlayerIndex] = { ...player, hand: newHand };
+              
+              // Persist to Server
+              axios.post(`${API_URL}/game/${roomId}/reorder`, { 
+                  playerIndex: myPlayerIndex, 
+                  newHand 
+              }).catch(err => console.error("Failed to save sort", err));
+
               return { ...prev, players: newPlayers };
           });
       }
@@ -162,7 +205,7 @@ function App() {
                 <div className="flex flex-col gap-2">
                     {gameState.players.map(p => (
                         <div key={p.id} className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            <img src={p.avatar} alt="Avatar" className="w-8 h-8 rounded-full bg-white" />
                             <span>{p.name} {p.id === myPlayerIndex ? '(You)' : ''}</span>
                         </div>
                     ))}
@@ -177,6 +220,23 @@ function App() {
                 </button>
             )}
              {myPlayerIndex !== 0 && <p className="animate-pulse text-gray-400">Waiting for host to start...</p>}
+        </div>
+      );
+  }
+
+  if (gameState.status === 'FINISHED') {
+      return (
+        <div className="h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-6">
+            <h2 className="text-6xl font-bold text-yellow-400 mb-4">Game Over!</h2>
+            <div className="text-3xl">
+                Winner: <span className="text-green-400 font-bold">{gameState.winner}</span>
+            </div>
+            {gameState.winner === player.name ? (
+                <div className="text-2xl animate-bounce mt-4">🎉 You Won! 🎉</div>
+            ) : (
+                <div className="text-xl text-gray-400 mt-4">Better luck next time.</div>
+            )}
+            <button onClick={() => window.location.reload()} className="mt-8 bg-blue-600 px-6 py-3 rounded-lg font-bold">Play Again</button>
         </div>
       );
   }
@@ -200,29 +260,33 @@ function App() {
          {opponents.map((opp, idx) => {
              const isTop = opponents.length === 1;
               const style = isTop 
-                ? { top: '20px', left: '50%', transform: 'translateX(-50%)' } 
-                : { top: '20px', left: `${(idx + 1) * (100 / (opponents.length + 1))}%`, transform: 'translateX(-50%)' };
+                ? { top: '5%', left: '50%', transform: 'translateX(-50%)' } 
+                : { top: '5%', left: `${(idx + 1) * (100 / (opponents.length + 1))}%`, transform: 'translateX(-50%)' };
              
              return (
                  <div key={opp.id} className="absolute flex flex-col items-center" style={style}>
-                    <div className={`mb-2 font-semibold bg-black/30 px-2 py-1 rounded ${gameState.currentPlayerIndex === opp.id ? 'border border-yellow-400 text-yellow-300' : ''}`}>
-                        {opp.name}
-                    </div>
-                    <div className="relative w-48 h-24">
+                    <div className="relative w-32 h-16">
                         {opp.hand.map((_, cIdx) => (
                              <div 
                                 key={cIdx} 
-                                className="absolute bottom-0 left-1/2 w-20 h-32 rounded-lg bg-indigo-600 border-2 border-indigo-800 shadow-md origin-bottom"
+                                className="absolute bottom-0 left-1/2 w-12 h-20 rounded bg-indigo-600 border border-indigo-800 shadow-md origin-bottom"
                                 style={{ 
                                     transform: `translateX(-50%) rotate(${ (cIdx - opp.hand.length/2) * 5 }deg)`,
                                     backgroundImage: 'repeating-linear-gradient(45deg, #6366f1 25%, transparent 25%, transparent 75%, #6366f1 75%, #6366f1)',
-                                    backgroundSize: '20px 20px'
+                                    backgroundSize: '10px 10px'
                                 }}
                              ></div>
                         ))}
                     </div>
+                    <div className={`mt-1 text-sm font-semibold bg-black/30 px-2 py-1 rounded flex gap-2 items-center ${gameState.currentPlayerIndex === opp.id ? 'border border-yellow-400 text-yellow-300' : ''}`}>
+                        <img src={opp.avatar} alt="Opp" className="w-6 h-6 rounded-full bg-white" />
+                        {opp.name}
+                        {gameState.currentPlayerIndex === opp.id && (
+                            <span className="text-red-400 font-mono font-bold animate-pulse">{timeLeft}s</span>
+                        )}
+                    </div>
                  </div>
-             )
+             );
          })}
 
         {/* Center Table */}
@@ -269,10 +333,12 @@ function App() {
         <div className="flex justify-between items-center mb-4">
             <div>
                  <h2 className="text-2xl font-bold flex items-center gap-2">
+                    <img src={player.avatar} alt="Me" className="w-10 h-10 rounded-full bg-white border-2 border-green-400" />
                     Your Hand 
                     {isMyTurn && <span className="text-sm font-normal bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded animate-pulse">
                         {gameState.turnPhase === 'DRAW' ? 'Pick a Card' : 'Discard a Card'}
                     </span>}
+                    {isMyTurn && <span className="text-xl text-red-500 font-bold font-mono ml-4">{timeLeft}s</span>}
                  </h2>
             </div>
             
@@ -283,7 +349,13 @@ function App() {
                 >
                     Sort by {sortState === 'suit' ? 'Suit' : 'Value'}
                 </button>
-                <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition disabled:bg-gray-600 disabled:opacity-50" disabled>Declare</button>
+                <button 
+                    onClick={handleShow}
+                    disabled={!isMyTurn}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition disabled:bg-gray-600 disabled:opacity-50"
+                >
+                    Show
+                </button>
             </div>
         </div>
 

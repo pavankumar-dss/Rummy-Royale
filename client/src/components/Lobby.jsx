@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const Lobby = ({ onJoinGame }) => {
     const [mode, setMode] = useState('menu'); // menu, single_setup, multi_setup, multi_join
@@ -28,7 +28,8 @@ const Lobby = ({ onJoinGame }) => {
                 onJoinGame(roomId, playerIndex); 
             }
         } catch (err) {
-            setError('Failed to create game. Is server running?');
+            console.error(err);
+            setError(`Error: ${err.message}. ${err.response?.data?.error || ''}`);
         }
     };
 
