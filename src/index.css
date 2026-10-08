@@ -1,1 +1,160 @@
 @import "tailwindcss";
+
+@theme {
+    --font-display: "Cinzel", Georgia, "Times New Roman", serif;
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --color-felt-950: #04140d;
+    --color-felt-900: #072a1b;
+    --color-felt-800: #0b3d27;
+    --color-felt-700: #0f5132;
+    --color-felt-600: #15693f;
+    --color-felt-500: #1c8a52;
+
+    --color-gold-200: #f8e7b0;
+    --color-gold-300: #f2d77e;
+    --color-gold-400: #e6bf55;
+    --color-gold-500: #cfa13a;
+    --color-gold-600: #a97f24;
+    --color-gold-700: #7d5c16;
+
+    --color-ivory: #fbf7ec;
+    --color-crimson-600: #a3172f;
+    --color-crimson-700: #7d1426;
+    --color-crimson-800: #5c0d1b;
+
+    --animate-glow: glow 1.4s ease-in-out infinite;
+    --animate-float: float 3s ease-in-out infinite;
+}
+
+@keyframes glow {
+    0%, 100% { box-shadow: 0 0 0 2px rgb(230 191 85 / 0.9), 0 0 12px 2px rgb(230 191 85 / 0.45); }
+    50% { box-shadow: 0 0 0 3px rgb(242 215 126 / 1), 0 0 26px 8px rgb(230 191 85 / 0.7); }
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+:root {
+    color-scheme: dark;
+    /* Card size scales with the screen; everything card-shaped derives from it. */
+    --card-w: 3.25rem;
+    --card-overlap: -0.5;
+}
+
+@media (min-width: 640px) {
+    :root { --card-w: 4.6rem; --card-overlap: -0.42; }
+}
+
+@media (min-width: 1024px) {
+    :root { --card-w: 5.4rem; --card-overlap: -0.4; }
+}
+
+html, body, #root {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--color-felt-950);
+    color: #f3efe2;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* --- Table surfaces --- */
+
+.felt {
+    position: relative;
+    background:
+        radial-gradient(ellipse 80% 70% at 50% 45%, #1d8a55 0%, #12673f 38%, #0b4a2d 70%, #07331f 100%);
+}
+
+/* Fine fabric grain over the felt. */
+.felt::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.16;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    border-radius: inherit;
+}
+
+.wood-rail {
+    background: linear-gradient(145deg, #5a3519 0%, #3b210e 40%, #6b4020 60%, #2e1909 100%);
+    box-shadow:
+        inset 0 2px 3px rgb(255 255 255 / 0.15),
+        inset 0 -3px 6px rgb(0 0 0 / 0.5),
+        0 20px 50px rgb(0 0 0 / 0.6);
+}
+
+.gold-line {
+    box-shadow:
+        inset 0 0 0 1.5px rgb(207 161 58 / 0.7),
+        inset 0 0 40px rgb(0 0 0 / 0.45);
+}
+
+.gold-text {
+    background: linear-gradient(180deg, #fbeec0 0%, #e6bf55 45%, #a97f24 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.panel {
+    background: linear-gradient(180deg, rgb(10 40 27 / 0.92), rgb(5 24 16 / 0.95));
+    border: 1px solid rgb(207 161 58 / 0.35);
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.05);
+    backdrop-filter: blur(8px);
+}
+
+/* --- Buttons --- */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    transition: transform 0.12s ease, filter 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+    user-select: none;
+}
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-gold {
+    color: #2b1d05;
+    background: linear-gradient(180deg, #f6dd8c 0%, #dcb04a 50%, #b88a2c 100%);
+    box-shadow: 0 2px 0 #7d5c16, 0 6px 16px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.6);
+}
+.btn-gold:hover:not(:disabled) { filter: brightness(1.07); }
+
+.btn-ghost {
+    color: #f3efe2;
+    background: rgb(255 255 255 / 0.06);
+    border: 1px solid rgb(255 255 255 / 0.12);
+}
+.btn-ghost:hover:not(:disabled) { background: rgb(255 255 255 / 0.12); }
+
+.btn-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+}
+
+/* --- Cards --- */
+
+.card { width: var(--card-w); aspect-ratio: 5 / 7; flex-shrink: 0; }
+.card-sm { width: calc(var(--card-w) * 0.8); aspect-ratio: 5 / 7; flex-shrink: 0; }
+.card-mini { width: calc(var(--card-w) * 0.42); aspect-ratio: 5 / 7; flex-shrink: 0; }
+.card-shadow { filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.35)) drop-shadow(0 6px 10px rgb(0 0 0 / 0.25)); }
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-glow, .animate-float { animation: none; }
+}

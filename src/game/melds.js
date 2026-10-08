@@ -133,26 +133,50 @@ export function findDeclaration(hand, wildRank) {
 
 const MELD_BONUS = { [MELD.SET]: 0, [MELD.IMPURE]: 2, [MELD.PURE]: 10 };
 
+// Best set of disjoint melds within any subset of `cards`, scored at 10 per melded
+// card plus a bonus for sequences (mostly pure ones, since a declaration needs one).
+function createMeldSolver(cards, wildRank) {
+    const { types, byLowestCard } = buildMeldIndex(cards, wildRank);
+    const memo = new Map();
+    const EMPTY = { score: 0, melds: [] };
+
+    const best = (mask) => {
+        if (mask === 0) return EMPTY;
+        if (memo.has(mask)) return memo.get(mask);
+        const low = lowestIndex(mask);
+        let result = best(mask ^ (1 << low));
+        for (const meld of byLowestCard[low]) {
+            if ((meld & mask) !== meld) continue;
+            const rest = best(mask ^ meld);
+            const score = popcount(meld) * 10 + MELD_BONUS[types[meld]] + rest.score;
+            if (score > result.score) result = { score, melds: [meld, ...rest.melds] };
+        }
+        memo.set(mask, result);
+        return result;
+    };
+    return { best, types };
+}
+
 /**
- * Scores subsets of `cards` by the best melds they contain (10 per melded card,
- * plus a bonus for sequences, mostly pure ones). Used by bots to pick discards.
+ * Scores subsets of `cards` by the best melds they contain. Used by bots to pick discards.
  * Returns (mask) => score, where bit i of mask means cards[i] is included.
  */
 export function createMeldScorer(cards, wildRank) {
-    const { types, byLowestCard } = buildMeldIndex(cards, wildRank);
-    const memo = new Map();
+    const { best } = createMeldSolver(cards, wildRank);
+    return (mask) => best(mask).score;
+}
 
-    const best = (mask) => {
-        if (mask === 0) return 0;
-        if (memo.has(mask)) return memo.get(mask);
-        const low = lowestIndex(mask);
-        let score = best(mask ^ (1 << low));
-        for (const meld of byLowestCard[low]) {
-            if ((meld & mask) !== meld) continue;
-            score = Math.max(score, popcount(meld) * 10 + MELD_BONUS[types[meld]] + best(mask ^ meld));
-        }
-        memo.set(mask, score);
-        return score;
+/**
+ * Splits a hand into its best melds plus the leftover cards. Powers "Auto-arrange".
+ * Returns { melds: [{ type, cards }], leftover: cards[] }.
+ */
+export function arrangeHand(cards, wildRank) {
+    if (cards.length === 0) return { melds: [], leftover: [] };
+    const { best, types } = createMeldSolver(cards, wildRank);
+    const { melds } = best((1 << cards.length) - 1);
+    const used = melds.reduce((acc, m) => acc | m, 0);
+    return {
+        melds: melds.map((m) => ({ type: types[m], cards: cardsIn(m, cards) })),
+        leftover: cards.filter((_, i) => !(used & (1 << i))),
     };
-    return best;
 }

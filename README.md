@@ -1,6 +1,12 @@
 # 🂡 Rummy Royale
 
-Indian Rummy in the browser, built with **React**, **Vite** and **Tailwind CSS**. Play against 1–3 bots, with drag-and-drop hand sorting and an optional turn timer.
+Indian Rummy in the browser, built with **React**, **Vite**, **Tailwind CSS** and **Motion**. Play against 1–3 bots at a casino-style table.
+
+- 🃏 Hand-drawn SVG playing cards, felt table, and animated dealing, drawing and discarding
+- 🔊 Real card sounds (shuffle, slide, place) plus chimes for your turn, the timer and wins; mute anytime
+- 🧩 Group your hand into melds, with live labels (pure sequence, sequence, set) and progress chips
+- ✨ Auto-arrange finds your best melds; Hint suggests what to draw or discard
+- 🎓 A short illustrated tutorial on first visit (and from the ? button)
 
 Everything runs in the browser. There is no server, so it is hosted for free on GitHub Pages.
 
@@ -54,8 +60,15 @@ src/
     melds.js        Meld classification and the hand solver (declaration check)
     engine.js       Game state, actions (draw/discard/declare/reorder/timeout), per-player views
     bot.js          Bot strategy (sees only its own player view)
-  components/       React UI (Lobby, GameTable, Hand, Card, GameOver)
-  App.jsx           Wires the engine to the UI, paces bot turns and the timer
+    groups.js       How the player has grouped their hand (labels, auto-arrange)
+  audio/sounds.js   Web Audio: card samples plus synthesized chimes, mute setting
+  components/       React UI (Lobby, GameTable, Hand, Seat, Piles, Card, GameOver, Tutorial)
+  App.jsx           Wires the engine to the UI: event sounds, bot pacing, timer, hints
+public/sounds/      Card sound effects
 ```
 
 The engine is a pure `applyAction(state, playerId, action)` function, and players only ever receive `getPlayerView(state, playerId)`. That keeps the door open for peer-to-peer multiplayer later: the host's browser would run the engine and send each player only their own view.
+
+## 🙏 Credits
+
+Card sound effects from [Casino Audio](https://kenney.nl/assets/casino-audio) by Kenney (CC0, public domain).

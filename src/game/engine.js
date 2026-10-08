@@ -28,6 +28,7 @@ export function createGame({ players, turnSeconds = 0, rng = Math.random, now = 
     const wildRank = wildCard.rank === JOKER ? 'A' : wildCard.rank;
 
     return {
+        id: Math.floor(rng() * 2 ** 32).toString(36),
         status: 'PLAYING',
         players: seated,
         deck,
@@ -41,12 +42,15 @@ export function createGame({ players, turnSeconds = 0, rng = Math.random, now = 
         turnSeconds,
         turnDeadline: deadlineFrom(turnSeconds, now),
         winner: null, // { playerId, melds } once someone declares
-        log: [],
+        eventSeq: 1,
+        log: [{ seq: 1, turn: 1, playerId: null, type: 'deal', text: 'Cards dealt. Good luck!' }],
     };
 }
 
-function addLog(state, playerId, text) {
-    state.log = [...state.log, { turn: state.turn, playerId, text }].slice(-LOG_LIMIT);
+// Every event gets a type and an increasing seq so the UI can react (sounds, animations) exactly once.
+function addLog(state, playerId, type, text) {
+    state.eventSeq += 1;
+    state.log = [...state.log, { seq: state.eventSeq, turn: state.turn, playerId, type, text }].slice(-LOG_LIMIT);
 }
 
 function endTurn(state, now) {
@@ -80,7 +84,7 @@ const handlers = {
             const card = state.discardPile.pop();
             player.hand.push(card);
             state.drawnCard = { id: card.id, fromDiscard: true };
-            addLog(state, playerId, `picked ${cardLabel(card)} from the discard pile`);
+            addLog(state, playerId, 'pick', `picked ${cardLabel(card)} from the discard pile`);
         } else {
             if (state.deck.length === 0) {
                 // Reshuffle everything under the top discard into a new deck.
@@ -89,14 +93,14 @@ const handlers = {
                 state.discardPile = top ? [top] : [];
             }
             if (state.deck.length === 0) {
-                addLog(state, playerId, 'found the deck empty. The game ends in a draw');
+                addLog(state, playerId, 'deck-empty', 'found the deck empty. The game ends in a draw');
                 finish(state, null);
                 return null;
             }
             const card = state.deck.pop();
             player.hand.push(card);
             state.drawnCard = { id: card.id, fromDiscard: false };
-            addLog(state, playerId, 'drew from the deck');
+            addLog(state, playerId, 'draw', 'drew from the deck');
         }
         state.phase = 'DISCARD';
         return null;
@@ -111,7 +115,7 @@ const handlers = {
             return "You can't discard the card you just picked from the discard pile.";
         }
         const card = discardCard(state, player, index);
-        addLog(state, playerId, `discarded ${cardLabel(card)}`);
+        addLog(state, playerId, 'discard', `discarded ${cardLabel(card)}`);
         endTurn(state, now);
         return null;
     },
@@ -125,7 +129,7 @@ const handlers = {
         }
         discardCard(state, player, player.hand.findIndex((c) => c.id === result.discard.id));
         player.hand = result.melds.flatMap((m) => m.cards);
-        addLog(state, playerId, `declared and discarded ${cardLabel(result.discard)}`);
+        addLog(state, playerId, 'declare', `declared and discarded ${cardLabel(result.discard)}`);
         finish(state, { playerId, melds: result.melds });
         return null;
     },
@@ -154,9 +158,9 @@ const handlers = {
             let index = drawn && !drawn.fromDiscard ? player.hand.findIndex((c) => c.id === drawn.id) : -1;
             if (index === -1) index = player.hand.findLastIndex((c) => c.id !== drawn?.id);
             const card = discardCard(state, player, index);
-            addLog(state, playerId, `ran out of time and discarded ${cardLabel(card)}`);
+            addLog(state, playerId, 'timeout-discard', `ran out of time and discarded ${cardLabel(card)}`);
         } else {
-            addLog(state, playerId, 'ran out of time and missed a turn');
+            addLog(state, playerId, 'timeout-skip', 'ran out of time and missed a turn');
         }
         endTurn(state, now);
         return null;
@@ -196,6 +200,7 @@ export function getPlayerView(state, viewerId) {
         deckCount: deck.length,
         discardCount: discardPile.length,
         discardTop: discardPile.at(-1) ?? null,
+        discardRecent: discardPile.slice(-3), // the pile is public; the UI shows a few cards peeking out
         drawnCard: state.currentPlayer === viewerId ? drawnCard : null,
         players: state.players.map(({ hand, ...p }) =>
             p.id === viewerId || revealAll ? { ...p, hand, handCount: hand.length } : { ...p, handCount: hand.length },

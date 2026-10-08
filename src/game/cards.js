@@ -46,6 +46,40 @@ export function shuffle(cards, rng = Math.random) {
     return out;
 }
 
+/**
+ * Natural reading order for a group. Same-suit runs are laid out by rank with wilds
+ * filling the gaps they stand in for (4♥ JK 6♥), and Q-K-A keeps the ace high.
+ * Anything else is sorted by suit.
+ */
+export function orderForDisplay(cards, wildRank) {
+    const wilds = cards.filter((c) => isWild(c, wildRank));
+    const naturals = cards.filter((c) => !isWild(c, wildRank));
+    const isRun =
+        naturals.length > 0 &&
+        naturals.every((c) => c.suit === naturals[0].suit) &&
+        new Set(naturals.map((c) => c.rank)).size === naturals.length;
+    if (!isRun) return sortCards(cards, 'suit', wildRank);
+
+    const value = (c, aceHigh) => (aceHigh && c.rank === 'A' ? 14 : rankValue(c.rank));
+    const span = (aceHigh) => {
+        const values = naturals.map((c) => value(c, aceHigh));
+        return Math.max(...values) - Math.min(...values);
+    };
+    const aceHigh = naturals.some((c) => c.rank === 'A') && span(true) < span(false);
+    const byValue = [...naturals].sort((a, b) => value(a, aceHigh) - value(b, aceHigh));
+
+    const out = [];
+    const spare = [...wilds];
+    byValue.forEach((card, i) => {
+        if (i > 0) {
+            const gap = value(card, aceHigh) - value(byValue[i - 1], aceHigh) - 1;
+            for (let g = 0; g < gap && spare.length; g++) out.push(spare.shift());
+        }
+        out.push(card);
+    });
+    return [...out, ...spare];
+}
+
 // Sort by suit then rank, or by rank then suit. Wilds always go to the right.
 export function sortCards(cards, by, wildRank) {
     const key = (c) => {
