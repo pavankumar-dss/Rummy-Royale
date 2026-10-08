@@ -15,7 +15,20 @@ import Card from './Card';
 import Hand from './Hand';
 import Seat from './Seat';
 import { Deck, DiscardPile, DISCARD_DROP } from './Piles';
-import { BulbIcon, CheckIcon, CrownIcon, ExitIcon, GroupIcon, HelpIcon, LayersIcon, MuteIcon, SparklesIcon, VolumeIcon } from './icons';
+import {
+    BulbIcon,
+    CheckIcon,
+    CrownIcon,
+    ExitIcon,
+    FastForwardIcon,
+    GroupIcon,
+    HelpIcon,
+    LayersIcon,
+    MuteIcon,
+    ScoresIcon,
+    SparklesIcon,
+    VolumeIcon,
+} from './icons';
 import { isWild } from '../game/cards.js';
 import { NEW_GROUP, handProgress, moveCards } from '../game/groups.js';
 import { play } from '../audio/sounds.js';
@@ -29,12 +42,15 @@ function moveBetweenGroups(groups, activeId, overId) {
     return moveCards(groups, [activeId], to.id, index);
 }
 
-function TopBar({ event, muted, onToggleMute, onHelp, onQuit }) {
+function TopBar({ event, roundNumber, muted, onToggleMute, onShowScores, onHelp, onQuit }) {
     return (
         <header className="flex items-center gap-2 px-3 sm:px-5 py-2 bg-black/40 border-b border-gold-500/20">
             <div className="flex items-center gap-1.5 text-gold-400 shrink-0">
                 <CrownIcon className="w-5 h-5" />
                 <span className="hidden md:inline font-display font-bold tracking-wide gold-text">Rummy Royale</span>
+                <span className="ml-1 rounded-full bg-gold-500/15 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gold-200">
+                    Round {roundNumber}
+                </span>
             </div>
             <div className="flex-1 min-w-0 text-center text-xs sm:text-sm text-gold-100/90 overflow-hidden">
                 <AnimatePresence mode="wait" initial={false}>
@@ -51,6 +67,9 @@ function TopBar({ event, muted, onToggleMute, onHelp, onQuit }) {
                 </AnimatePresence>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+                <button className="btn btn-ghost btn-icon" onClick={onShowScores} aria-label="Scoreboard" title="Scoreboard">
+                    <ScoresIcon />
+                </button>
                 <button className="btn btn-ghost btn-icon" onClick={onHelp} aria-label="How to play" title="How to play">
                     <HelpIcon />
                 </button>
@@ -90,6 +109,14 @@ export default function GameTable({
     dealing,
     turnProgress,
     muted,
+    roundNumber,
+    seatTotals,
+    limit,
+    spectator,
+    fastForward,
+    onToggleFastForward,
+    onSkipToEnd,
+    onShowScores,
     onGroupsChange,
     onToggleSelect,
     onClearSelection,
@@ -104,13 +131,13 @@ export default function GameTable({
     onHelp,
     onQuit,
 }) {
-    const me = view.players[view.viewerId];
+    const me = view.players.find((p) => p.id === view.viewerId); // undefined while spectating
     const opponents = view.players.filter((p) => p.id !== view.viewerId);
     const playing = view.status === 'PLAYING';
     const myTurn = playing && view.currentPlayer === view.viewerId;
     const canDraw = myTurn && view.phase === 'DRAW';
     const canDiscard = myTurn && view.phase === 'DISCARD';
-    const cardsById = new Map(me.hand.map((c) => [c.id, c]));
+    const cardsById = new Map((me?.hand ?? []).map((c) => [c.id, c]));
     const lastEvent = view.log.at(-1);
 
     // Direction from the table centre toward each seat, for cards flying between them.
@@ -204,19 +231,29 @@ export default function GameTable({
             onDragCancel={endDrag}
         >
             <div className="min-h-[100dvh] flex flex-col bg-felt-950">
-                <TopBar event={event} muted={muted} onToggleMute={onToggleMute} onHelp={onHelp} onQuit={onQuit} />
+                <TopBar
+                    event={event}
+                    roundNumber={roundNumber}
+                    muted={muted}
+                    onToggleMute={onToggleMute}
+                    onShowScores={onShowScores}
+                    onHelp={onHelp}
+                    onQuit={onQuit}
+                />
 
                 {/* The table */}
                 <main className="flex-1 flex p-2 sm:p-4 min-h-[22rem]">
                     <div className="wood-rail flex-1 flex rounded-[2.2rem] sm:rounded-[4rem] p-2 sm:p-3">
                         <div className="felt gold-line flex-1 rounded-[1.8rem] sm:rounded-[3.3rem] flex flex-col items-center justify-between gap-4 py-4 sm:py-6 px-2 overflow-hidden">
-                            <div className="relative z-10 flex justify-center gap-3 sm:gap-14 w-full">
+                            <div className="relative z-10 flex flex-wrap justify-center gap-x-2 gap-y-3 sm:gap-x-14 w-full">
                                 {opponents.map((p, i) => (
                                     <Seat
                                         key={p.id}
                                         player={p}
                                         active={playing && view.currentPlayer === p.id}
                                         progress={turnProgress}
+                                        total={seatTotals[p.id]}
+                                        limit={limit}
                                         dealing={dealing}
                                         dealDelay={0.9 + i * 0.05}
                                     />
@@ -275,87 +312,121 @@ export default function GameTable({
                         )}
                     </AnimatePresence>
 
-                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <Avatar player={me} size={46} progress={myTurn ? turnProgress : null} active={myTurn} />
-                            <div className="min-w-0">
-                                <p className="font-display font-bold text-base sm:text-lg leading-tight">{me.name}</p>
-                                <p className={`text-xs sm:text-sm ${myTurn ? 'text-gold-200' : 'text-white/55'}`}>{prompt}</p>
+                    {spectator ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 py-2">
+                            <div>
+                                <p className="font-display font-bold text-lg text-red-200">You&apos;re out</p>
+                                <p className="text-sm text-white/60">
+                                    Eliminated in round {spectator.eliminatedIn}. Watching the bots play out the match.
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    className={`btn px-4 py-2 text-sm ${fastForward ? 'btn-gold' : 'btn-ghost'}`}
+                                    onClick={onToggleFastForward}
+                                    aria-pressed={fastForward}
+                                >
+                                    <FastForwardIcon className="w-4 h-4" /> Fast forward
+                                </button>
+                                <button className="btn btn-ghost px-4 py-2 text-sm" onClick={onSkipToEnd}>
+                                    Skip to final standings
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <Avatar player={me} size={46} progress={myTurn ? turnProgress : null} active={myTurn} />
+                                <div className="min-w-0">
+                                    <p className="font-display font-bold text-base sm:text-lg leading-tight">
+                                        {me.name}
+                                        <span
+                                            className={`ml-2 font-sans text-xs font-semibold tabular-nums ${
+                                                seatTotals[me.id] > limit * 0.75 ? 'text-amber-300' : 'text-gold-200/70'
+                                            }`}
+                                        >
+                                            {seatTotals[me.id]} / {limit} pts
+                                        </span>
+                                    </p>
+                                    <p className={`text-xs sm:text-sm ${myTurn ? 'text-gold-200' : 'text-white/55'}`}>{prompt}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <Chip ok={progress.hasPure}>Pure sequence</Chip>
+                                <Chip ok={progress.sequences >= 2}>Sequences {Math.min(progress.sequences, 2)}/2</Chip>
+                                <Chip ok={progress.unmatched === 0}>{progress.unmatched} unmatched</Chip>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                                <button className="btn btn-ghost px-3 py-2 text-sm" onClick={onSort} title="Group cards by suit">
+                                    <LayersIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Sort</span>
+                                </button>
+                                <button className="btn btn-ghost px-3 py-2 text-sm" onClick={onAutoArrange} title="Find your best melds">
+                                    <SparklesIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Auto-arrange</span>
+                                </button>
+                                <button className="btn btn-ghost px-3 py-2 text-sm" onClick={onHint} disabled={!myTurn} title="Suggest a move">
+                                    <BulbIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Hint</span>
+                                </button>
+                                <button
+                                    className={`btn btn-gold px-4 sm:px-5 py-2 text-sm font-display tracking-wide ${hint?.kind === 'declare' ? 'animate-glow' : ''}`}
+                                    onClick={onDeclare}
+                                    disabled={!canDiscard}
+                                >
+                                    Declare
+                                </button>
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <Chip ok={progress.hasPure}>Pure sequence</Chip>
-                            <Chip ok={progress.sequences >= 2}>Sequences {Math.min(progress.sequences, 2)}/2</Chip>
-                            <Chip ok={progress.unmatched === 0}>{progress.unmatched} unmatched</Chip>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                            <button className="btn btn-ghost px-3 py-2 text-sm" onClick={onSort} title="Group cards by suit">
-                                <LayersIcon className="w-4 h-4" />
-                                <span className="hidden sm:inline">Sort</span>
-                            </button>
-                            <button className="btn btn-ghost px-3 py-2 text-sm" onClick={onAutoArrange} title="Find your best melds">
-                                <SparklesIcon className="w-4 h-4" />
-                                <span className="hidden sm:inline">Auto-arrange</span>
-                            </button>
-                            <button className="btn btn-ghost px-3 py-2 text-sm" onClick={onHint} disabled={!myTurn} title="Suggest a move">
-                                <BulbIcon className="w-4 h-4" />
-                                <span className="hidden sm:inline">Hint</span>
-                            </button>
-                            <button
-                                className={`btn btn-gold px-4 sm:px-5 py-2 text-sm font-display tracking-wide ${hint?.kind === 'declare' ? 'animate-glow' : ''}`}
-                                onClick={onDeclare}
-                                disabled={!canDiscard}
-                            >
-                                Declare
-                            </button>
-                        </div>
-                    </div>
-
-                    <AnimatePresence>
-                        {selectedIds.length > 0 && (
-                            <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="overflow-hidden"
-                            >
-                                <div className="flex items-center justify-center gap-2 pt-3 text-sm">
-                                    <span className="text-white/60">{selectedIds.length} selected</span>
-                                    {selectedIds.length >= 2 && (
-                                        <button className="btn btn-ghost px-3 py-1.5" onClick={onGroupSelected}>
-                                            <GroupIcon className="w-4 h-4" /> Group
+                        <AnimatePresence>
+                            {selectedIds.length > 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="flex items-center justify-center gap-2 pt-3 text-sm">
+                                        <span className="text-white/60">{selectedIds.length} selected</span>
+                                        {selectedIds.length >= 2 && (
+                                            <button className="btn btn-ghost px-3 py-1.5" onClick={onGroupSelected}>
+                                                <GroupIcon className="w-4 h-4" /> Group
+                                            </button>
+                                        )}
+                                        {selectedIds.length === 1 && canDiscard && (
+                                            <button className="btn btn-gold px-3 py-1.5" onClick={() => onDiscard(selectedIds[0])}>
+                                                Discard
+                                            </button>
+                                        )}
+                                        <button className="btn px-2 py-1.5 text-white/60 hover:text-white" onClick={onClearSelection}>
+                                            Clear
                                         </button>
-                                    )}
-                                    {selectedIds.length === 1 && canDiscard && (
-                                        <button className="btn btn-gold px-3 py-1.5" onClick={() => onDiscard(selectedIds[0])}>
-                                            Discard
-                                        </button>
-                                    )}
-                                    <button className="btn px-2 py-1.5 text-white/60 hover:text-white" onClick={onClearSelection}>
-                                        Clear
-                                    </button>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
-                    <div className="mt-2 overflow-x-clip">
-                        <Hand
-                            key={view.id}
-                            groups={shownGroups}
-                            cardsById={cardsById}
-                            wildRank={view.wildRank}
-                            selectedIds={selectedIds}
-                            hintId={hint?.kind === 'card' ? hint.id : null}
-                            dealing={dealing}
-                            drawnId={view.drawnCard?.id}
-                            drawnFrom={view.drawnCard?.fromDiscard ? 'discard' : 'deck'}
-                            dragging={activeId !== null}
-                            onToggle={onToggleSelect}
-                        />
-                    </div>
+                        <div className="mt-2 overflow-x-clip">
+                            <Hand
+                                key={view.id}
+                                groups={shownGroups}
+                                cardsById={cardsById}
+                                wildRank={view.wildRank}
+                                selectedIds={selectedIds}
+                                hintId={hint?.kind === 'card' ? hint.id : null}
+                                dealing={dealing}
+                                drawnId={view.drawnCard?.id}
+                                drawnFrom={view.drawnCard?.fromDiscard ? 'discard' : 'deck'}
+                                dragging={activeId !== null}
+                                onToggle={onToggleSelect}
+                            />
+                        </div>
+                        </>
+                    )}
                 </section>
             </div>
 

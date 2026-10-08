@@ -17,7 +17,7 @@ const ThinkingDots = () => (
 );
 
 // An opponent around the table: fanned card backs, avatar with timer ring and name plate.
-const Seat = ({ player, active, progress, dealing, dealDelay = 0 }) => {
+const Seat = ({ player, active, progress, total, limit, dealing, dealDelay = 0 }) => {
     const count = player.handCount;
     return (
         <div className="flex flex-col items-center gap-1.5 min-w-0">
@@ -51,7 +51,10 @@ const Seat = ({ player, active, progress, dealing, dealDelay = 0 }) => {
                         {player.name}
                         {active && <ThinkingDots />}
                     </p>
-                    <p className="text-[0.65rem] text-gold-200/70">{count} cards</p>
+                    <p className="text-[0.65rem] text-gold-200/70 whitespace-nowrap">
+                        <span className="hidden sm:inline">{count} cards · </span>
+                        <span className={`font-semibold tabular-nums ${total > limit * 0.75 ? 'text-amber-300' : ''}`}>{total} pts</span>
+                    </p>
                 </div>
             </div>
         </div>

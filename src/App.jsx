@@ -3,28 +3,31 @@ import { AnimatePresence, MotionConfig } from 'motion/react';
 import confetti from 'canvas-confetti';
 import Lobby from './components/Lobby';
 import GameTable from './components/GameTable';
-import GameOver from './components/GameOver';
+import MatchOver from './components/MatchOver';
 import Tutorial from './components/Tutorial';
+import { Overlay, Panel, RoundSummary, ScoreTable } from './components/Scoreboard';
 import { CardDefs } from './components/Card';
 import { DEAL_START_S, DEAL_STEP_S } from './components/Hand';
-import { applyAction, createGame, getPlayerView } from './game/engine.js';
+import { getPlayerView } from './game/engine.js';
+import { applyMatchAction, createMatch, endMatch, seatOf, standings, startNextRound } from './game/match.js';
 import { chooseBotAction } from './game/bot.js';
 import { cardLabel } from './game/cards.js';
 import { NEW_GROUP, arrangeGroups, groupBySuit, moveCards, reconcileGroups } from './game/groups.js';
 import { isMuted, play, setMuted, unlockAudio } from './audio/sounds.js';
 
-const HUMAN = 0;
+const HUMAN_ID = 0; // the human's id in the match (their seat can change between rounds)
 const BOT_STEP_MS = 850;
+const FAST_BOT_STEP_MS = 180;
 const DEAL_MS = 2300; // shuffle + deal animation before play starts
 const NOTICE_MS = 3800;
 const TUTORIAL_KEY = 'rummy-royale:tutorial-seen';
-const DEFAULT_SETTINGS = { name: 'You', bots: 2, turnSeconds: 30 };
+const DEFAULT_SETTINGS = { name: 'You', bots: 2, turnSeconds: 30, limit: 200 };
 const NO_CARDS = [];
 
-function newGame({ name, bots, turnSeconds }) {
+function newMatch({ name, bots, turnSeconds, limit }) {
     const players = [{ name, isBot: false }, ...Array.from({ length: bots }, (_, i) => ({ name: `Bot ${i + 1}`, isBot: true }))];
     // The first turn's clock starts once the deal animation has finished.
-    return createGame({ players, turnSeconds, now: Date.now() + DEAL_MS });
+    return createMatch({ players, limit, turnSeconds, now: Date.now() + DEAL_MS });
 }
 
 function readFlag(key) {
@@ -44,8 +47,8 @@ function writeFlag(key) {
 }
 
 // One sound per game event, so every move is heard exactly once.
-function playEventSound(event) {
-    const mine = event.playerId === HUMAN;
+function playEventSound(event, humanSeat) {
+    const mine = event.playerId === humanSeat;
     switch (event.type) {
         case 'deal':
             play('packOpen');
@@ -68,7 +71,7 @@ function playEventSound(event) {
             if (mine) {
                 play('win', { delay: 0.3 });
                 play('chips', { delay: 1.0 });
-            } else {
+            } else if (humanSeat !== -1) {
                 play('lose', { delay: 0.3 });
             }
             break;
@@ -87,9 +90,25 @@ function celebrate() {
     );
 }
 
+// Plays every remaining round instantly with bot moves (used once the human is out).
+function simulateToEnd(match) {
+    let m = match;
+    for (let guard = 0; m.status !== 'FINISHED' && guard < 50000; guard++) {
+        if (m.status === 'ROUND_OVER') {
+            m = startNextRound(m);
+            continue;
+        }
+        const seat = m.game.currentPlayer;
+        const result = applyMatchAction(m, seat, chooseBotAction(getPlayerView(m.game, seat)));
+        if (result.error) break;
+        m = result.match;
+    }
+    return m;
+}
+
 function App() {
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-    const [game, setGame] = useState(null);
+    const [match, setMatch] = useState(null);
     const [groupState, setGroupState] = useState([]);
     const [selectedIds, setSelectedIds] = useState([]);
     const [notice, setNotice] = useState(null);
@@ -98,12 +117,17 @@ function App() {
     const [now, setNow] = useState(() => Date.now());
     const [muted, setMutedState] = useState(isMuted);
     const [showTutorial, setShowTutorial] = useState(() => !readFlag(TUTORIAL_KEY));
+    const [showScores, setShowScores] = useState(false);
+    const [showStandings, setShowStandings] = useState(false);
+    const [fastForward, setFastForward] = useState(false);
     const lastSeq = useRef(0);
     const lastTick = useRef(null);
 
+    const game = match?.game;
+    const humanSeat = match ? seatOf(match, HUMAN_ID) : -1; // -1 once eliminated (spectating)
     // The UI only ever reads the human player's view, never the raw game state.
-    const view = game && getPlayerView(game, HUMAN);
-    const hand = view?.players[HUMAN].hand ?? NO_CARDS;
+    const view = game && getPlayerView(game, humanSeat);
+    const hand = (humanSeat !== -1 && view?.players[humanSeat].hand) || NO_CARDS;
     const wildRank = game?.wildRank;
     const groups = useMemo(() => reconcileGroups(groupState, hand, wildRank), [groupState, hand, wildRank]);
     const selected = useMemo(() => selectedIds.filter((id) => hand.some((c) => c.id === id)), [selectedIds, hand]);
@@ -114,21 +138,21 @@ function App() {
     }, []);
 
     const dispatch = useCallback(
-        (playerId, action) => {
-            const { state, error } = applyAction(game, playerId, action);
+        (seat, action) => {
+            const { match: next, error } = applyMatchAction(match, seat, action);
             if (error) {
-                if (playerId === HUMAN) showNotice(error);
-                else console.error(`Bot ${playerId} made an illegal move:`, action, error);
+                if (seat === humanSeat) showNotice(error);
+                else console.error(`Bot in seat ${seat} made an illegal move:`, action, error);
                 return false;
             }
-            setGame(state);
-            if (playerId === HUMAN) {
+            setMatch(next);
+            if (seat === humanSeat) {
                 setNotice(null);
                 setHint(null);
             }
             return true;
         },
-        [game, showNotice],
+        [match, humanSeat, showNotice],
     );
 
     // Sounds for new game events (including bots' moves), and a chime when it's your turn.
@@ -137,14 +161,14 @@ function App() {
         const fresh = game.log.filter((e) => e.seq > lastSeq.current);
         if (!fresh.length) return;
         lastSeq.current = game.log.at(-1).seq;
-        fresh.forEach(playEventSound);
+        fresh.forEach((e) => playEventSound(e, humanSeat));
 
-        const yourTurnNow = game.status === 'PLAYING' && game.currentPlayer === HUMAN && game.phase === 'DRAW';
+        const yourTurnNow = game.status === 'PLAYING' && game.currentPlayer === humanSeat && game.phase === 'DRAW';
         if (yourTurnNow && fresh.some((e) => e.type === 'deal')) play('turn', { delay: DEAL_MS / 1000 });
-        else if (yourTurnNow && fresh.some((e) => e.playerId !== HUMAN && e.type !== 'pick' && e.type !== 'draw')) {
+        else if (yourTurnNow && fresh.some((e) => e.playerId !== humanSeat && e.type !== 'pick' && e.type !== 'draw')) {
             play('turn', { delay: 0.35 });
         }
-    }, [game]);
+    }, [game, humanSeat]);
 
     useEffect(() => {
         if (!dealing) return;
@@ -154,40 +178,43 @@ function App() {
 
     // Bots take one step (draw, then discard or declare) at a readable pace.
     useEffect(() => {
-        if (game?.status !== 'PLAYING' || dealing) return;
+        if (match?.status !== 'PLAYING' || dealing) return;
         const bot = game.players[game.currentPlayer];
         if (!bot.isBot) return;
-        const timer = setTimeout(() => {
-            const ok = dispatch(bot.id, chooseBotAction(getPlayerView(game, bot.id)));
-            if (!ok) {
-                // Never let a bot bug freeze the game.
-                const fallback =
-                    game.phase === 'DRAW'
-                        ? { type: 'draw', source: 'deck' }
-                        : { type: 'discard', cardId: bot.hand.findLast((c) => c.id !== game.drawnCard?.id).id };
-                dispatch(bot.id, fallback);
-            }
-        }, BOT_STEP_MS);
+        const timer = setTimeout(
+            () => {
+                const ok = dispatch(bot.id, chooseBotAction(getPlayerView(game, bot.id)));
+                if (!ok) {
+                    // Never let a bot bug freeze the game.
+                    const fallback =
+                        game.phase === 'DRAW'
+                            ? { type: 'draw', source: 'deck' }
+                            : { type: 'discard', cardId: bot.hand.findLast((c) => c.id !== game.drawnCard?.id).id };
+                    dispatch(bot.id, fallback);
+                }
+            },
+            fastForward ? FAST_BOT_STEP_MS : BOT_STEP_MS,
+        );
         return () => clearTimeout(timer);
-    }, [game, dealing, dispatch]);
+    }, [match?.status, game, dealing, fastForward, dispatch]);
 
     // Turn timer: tick the clock, sound the last five seconds, time the human out.
     useEffect(() => {
-        if (game?.status !== 'PLAYING' || !game.turnDeadline) return;
+        if (match?.status !== 'PLAYING' || !game.turnDeadline) return;
         const { turnDeadline, currentPlayer } = game;
         const interval = setInterval(() => {
             const t = Date.now();
             setNow(t);
-            if (currentPlayer !== HUMAN) return;
+            if (currentPlayer !== humanSeat) return;
             const secondsLeft = Math.ceil((turnDeadline - t) / 1000);
             if (secondsLeft <= 5 && secondsLeft > 0 && lastTick.current !== secondsLeft) {
                 lastTick.current = secondsLeft;
                 play('tick');
             }
-            if (t >= turnDeadline) dispatch(HUMAN, { type: 'timeout' });
+            if (t >= turnDeadline) dispatch(humanSeat, { type: 'timeout' });
         }, 250);
         return () => clearInterval(interval);
-    }, [game, dispatch]);
+    }, [match?.status, game, humanSeat, dispatch]);
 
     useEffect(() => {
         if (!notice) return;
@@ -195,27 +222,59 @@ function App() {
         return () => clearTimeout(timer);
     }, [notice]);
 
-    const humanWon = game?.status === 'FINISHED' && game.winner?.playerId === HUMAN;
+    // Confetti for winning a round, and again for winning the match.
+    const lastRound = match?.rounds.at(-1);
+    const wonRound = match?.status !== 'PLAYING' && lastRound?.winnerId === HUMAN_ID ? `${match.id}-${lastRound.number}` : null;
+    const wonMatch = showStandings && match?.status === 'FINISHED' && standings(match).winners.includes(HUMAN_ID);
     useEffect(() => {
-        if (!humanWon) return;
+        if (!wonRound && !wonMatch) return;
         const timers = celebrate();
         return () => timers.forEach(clearTimeout);
-    }, [humanWon]);
+    }, [wonRound, wonMatch]);
 
     // --- Actions ---
 
-    const start = (next) => {
-        unlockAudio();
+    const resetRoundUi = () => {
         lastSeq.current = 0;
         lastTick.current = null;
-        setSettings(next);
-        setGame(newGame(next));
         setGroupState([]);
         setSelectedIds([]);
         setHint(null);
         setNotice(null);
         setNow(Date.now()); // the clock only ticks during timed turns, so it may be stale
         setDealing(true);
+    };
+
+    const start = (next) => {
+        unlockAudio();
+        setSettings(next);
+        setMatch(newMatch(next));
+        setShowStandings(false);
+        setFastForward(false);
+        resetRoundUi();
+    };
+
+    const nextRound = () => {
+        setMatch(startNextRound(match, { now: Date.now() + DEAL_MS }));
+        resetRoundUi();
+    };
+
+    const finishEarly = () => {
+        setMatch(endMatch(match));
+        setShowStandings(true);
+    };
+
+    const skipToEnd = () => {
+        const finished = simulateToEnd(match);
+        lastSeq.current = finished.game.log.at(-1).seq; // don't replay the skipped rounds' sounds
+        setMatch(finished);
+        setShowStandings(true);
+    };
+
+    const quit = () => {
+        setMatch(null);
+        setShowStandings(false);
+        setShowScores(false);
     };
 
     const toggleMute = () => {
@@ -241,19 +300,18 @@ function App() {
     };
 
     const discard = (cardId) => {
-        if (cardId && dispatch(HUMAN, { type: 'discard', cardId })) setSelectedIds([]);
+        if (cardId && dispatch(humanSeat, { type: 'discard', cardId })) setSelectedIds([]);
     };
 
     const showHint = () => {
-        const myView = getPlayerView(game, HUMAN);
-        const action = chooseBotAction(myView);
+        const action = chooseBotAction(view);
         let next;
         let text;
         if (action.type === 'draw') {
             next = { kind: 'pile', source: action.source };
             text =
                 action.source === 'discard'
-                    ? `Take the ${cardLabel(myView.discardTop)} from the discard pile. It fits your hand.`
+                    ? `Take the ${cardLabel(view.discardTop)} from the discard pile. It fits your hand.`
                     : "Draw from the deck. The top discard doesn't help you.";
         } else if (action.type === 'declare') {
             next = { kind: 'declare' };
@@ -267,10 +325,12 @@ function App() {
         play('hint');
     };
 
+    const human = match?.players[HUMAN_ID];
+
     return (
         <MotionConfig reducedMotion="user">
             <CardDefs />
-            {game ? (
+            {match ? (
                 <GameTable
                     view={view}
                     groups={groups}
@@ -284,19 +344,27 @@ function App() {
                             : null
                     }
                     muted={muted}
+                    roundNumber={match.roundNumber}
+                    seatTotals={match.seats.map((id) => match.players[id].total)}
+                    limit={match.limit}
+                    spectator={humanSeat === -1 ? { eliminatedIn: human.eliminatedIn } : null}
+                    fastForward={fastForward}
+                    onToggleFastForward={() => setFastForward(!fastForward)}
+                    onSkipToEnd={skipToEnd}
+                    onShowScores={() => setShowScores(true)}
                     onGroupsChange={setGroupState}
                     onToggleSelect={toggleSelect}
                     onClearSelection={() => setSelectedIds([])}
                     onGroupSelected={() => regroup(moveCards(groups, selected, NEW_GROUP), 'group')}
-                    onDraw={(source) => dispatch(HUMAN, { type: 'draw', source })}
+                    onDraw={(source) => dispatch(humanSeat, { type: 'draw', source })}
                     onDiscard={discard}
-                    onDeclare={() => dispatch(HUMAN, { type: 'declare' })}
+                    onDeclare={() => dispatch(humanSeat, { type: 'declare' })}
                     onSort={() => regroup(groupBySuit(hand, wildRank))}
                     onAutoArrange={() => regroup(arrangeGroups(hand, wildRank))}
                     onHint={showHint}
                     onToggleMute={toggleMute}
                     onHelp={() => setShowTutorial(true)}
-                    onQuit={() => setGame(null)}
+                    onQuit={quit}
                 />
             ) : (
                 <Lobby
@@ -309,8 +377,35 @@ function App() {
             )}
 
             <AnimatePresence>
-                {game?.status === 'FINISHED' && (
-                    <GameOver key={`over-${game.id}`} view={view} onPlayAgain={() => start(settings)} onMenu={() => setGame(null)} />
+                {match && match.status !== 'PLAYING' && !showStandings && match.rounds.length > 0 && (
+                    <RoundSummary
+                        key={`round-${match.id}-${match.rounds.length}`}
+                        match={match}
+                        humanId={HUMAN_ID}
+                        onNext={nextRound}
+                        onEnd={finishEarly}
+                        onStandings={() => setShowStandings(true)}
+                    />
+                )}
+                {match?.status === 'FINISHED' && showStandings && (
+                    <MatchOver key={`standings-${match.id}`} match={match} humanId={HUMAN_ID} onNewMatch={() => start(settings)} onMenu={quit} />
+                )}
+                {showScores && match && (
+                    <Overlay key="scores" onClick={() => setShowScores(false)}>
+                        <Panel label="Scoreboard" className="max-w-2xl">
+                            <h2 className="font-display font-bold text-2xl gold-text mb-3">Scoreboard</h2>
+                            {match.rounds.length ? (
+                                <ScoreTable match={match} humanId={HUMAN_ID} />
+                            ) : (
+                                <p className="text-white/60 text-sm">No rounds finished yet. Counts appear here after each round.</p>
+                            )}
+                            <div className="mt-4 text-right">
+                                <button className="btn btn-gold px-5 py-2" onClick={() => setShowScores(false)}>
+                                    Close
+                                </button>
+                            </div>
+                        </Panel>
+                    </Overlay>
                 )}
             </AnimatePresence>
             <AnimatePresence>{showTutorial && <Tutorial key="tutorial" onClose={closeTutorial} />}</AnimatePresence>

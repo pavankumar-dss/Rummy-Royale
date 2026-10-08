@@ -1,4 +1,4 @@
-import { isPrintedJoker, isWild, rankValue } from './cards.js';
+import { cardPoints, isPrintedJoker, isWild, rankValue } from './cards.js';
 
 export const MELD = { NONE: 0, SET: 1, IMPURE: 2, PURE: 3 };
 export const MELD_NAMES = { [MELD.SET]: 'Set', [MELD.IMPURE]: 'Sequence', [MELD.PURE]: 'Pure sequence' };
@@ -178,5 +178,52 @@ export function arrangeHand(cards, wildRank) {
     return {
         melds: melds.map((m) => ({ type: types[m], cards: cardsIn(m, cards) })),
         leftover: cards.filter((_, i) => !(used & (1 << i))),
+    };
+}
+
+/**
+ * A losing hand's count once someone declares: the lowest possible total of the
+ * cards left out of melds. Number cards count their number, A/J/Q/K count 10,
+ * jokers and wilds count 0.
+ * Melds only protect cards if the hand has a "life" (at least one pure sequence).
+ * Without one, every card counts.
+ * Returns { hasLife, count, melds: [{ type, cards }], deadwood: cards[] }.
+ */
+export function scoreHand(hand, wildRank) {
+    const points = hand.map((c) => cardPoints(c, wildRank));
+    const noLife = { hasLife: false, count: points.reduce((a, b) => a + b, 0), melds: [], deadwood: [...hand] };
+    if (hand.length < 3) return noLife;
+
+    const { types, byLowestCard } = buildMeldIndex(hand, wildRank);
+    const memo = new Map();
+    const NONE = { cost: Infinity, melds: [] };
+
+    // Cheapest way to cover `mask`; needPure means a pure sequence is still required.
+    const solve = (mask, needPure) => {
+        if (mask === 0) return needPure ? NONE : { cost: 0, melds: [] };
+        const key = mask * 2 + needPure;
+        if (memo.has(key)) return memo.get(key);
+
+        const low = lowestIndex(mask);
+        const skip = solve(mask ^ (1 << low), needPure);
+        let best = { cost: skip.cost + points[low], melds: skip.melds };
+        for (const meld of byLowestCard[low]) {
+            if ((meld & mask) !== meld) continue;
+            const rest = solve(mask ^ meld, types[meld] === MELD.PURE ? 0 : needPure);
+            if (rest.cost < best.cost) best = { cost: rest.cost, melds: [meld, ...rest.melds] };
+        }
+        memo.set(key, best);
+        return best;
+    };
+
+    const result = solve((1 << hand.length) - 1, 1);
+    if (!Number.isFinite(result.cost)) return noLife;
+
+    const used = result.melds.reduce((acc, m) => acc | m, 0);
+    return {
+        hasLife: true,
+        count: result.cost,
+        melds: result.melds.map((m) => ({ type: types[m], cards: cardsIn(m, hand) })),
+        deadwood: hand.filter((_, i) => !(used & (1 << i))),
     };
 }

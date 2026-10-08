@@ -32,10 +32,11 @@ const Lobby = ({ initialSettings, muted, onToggleMute, onHelp, onStart }) => {
     const [name, setName] = useState(initialSettings.name);
     const [bots, setBots] = useState(initialSettings.bots);
     const [turnSeconds, setTurnSeconds] = useState(initialSettings.turnSeconds);
+    const [limit, setLimit] = useState(initialSettings.limit);
 
     const start = (e) => {
         e.preventDefault();
-        onStart({ name: name.trim() || 'You', bots, turnSeconds });
+        onStart({ name: name.trim() || 'You', bots, turnSeconds, limit });
     };
 
     return (
@@ -116,6 +117,25 @@ const Lobby = ({ initialSettings, muted, onToggleMute, onHelp, onStart }) => {
                         ))}
                     </div>
                 </fieldset>
+
+                <label className="block">
+                    <span className="flex items-baseline justify-between mb-1.5">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gold-200/80">Elimination limit</span>
+                        <span className="font-display font-bold text-gold-300 tabular-nums">{limit}</span>
+                    </span>
+                    <input
+                        type="range"
+                        min={50}
+                        max={500}
+                        step={10}
+                        value={limit}
+                        onChange={(e) => setLimit(Number(e.target.value))}
+                        className="w-full accent-gold-400"
+                    />
+                    <span className="block mt-1 text-[0.7rem] text-white/45">
+                        Unmatched cards add to your count each round (max 80). Go over {limit} and you&apos;re out.
+                    </span>
+                </label>
 
                 <button type="submit" className="btn btn-gold py-4 text-lg font-display font-bold tracking-wider mt-1">
                     Deal the cards

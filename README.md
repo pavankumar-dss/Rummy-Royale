@@ -6,6 +6,7 @@ Indian Rummy in the browser, built with **React**, **Vite**, **Tailwind CSS** an
 - 🔊 Real card sounds (shuffle, slide, place) plus chimes for your turn, the timer and wins; mute anytime
 - 🧩 Group your hand into melds, with live labels (pure sequence, sequence, set) and progress chips
 - ✨ Auto-arrange finds your best melds; Hint suggests what to draw or discard
+- 🏆 Multi-round matches with count scoring, a scoreboard, eliminations and final standings
 - 🎓 A short illustrated tutorial on first visit (and from the ? button)
 
 Everything runs in the browser. There is no server, so it is hosted for free on GitHub Pages.
@@ -51,6 +52,18 @@ One-time setup: in the GitHub repo go to **Settings → Pages → Build and depl
 - **To win**: after drawing, press **Declare**. Your 13 cards must form valid sets and sequences, with **at least 2 sequences, at least 1 of them pure**. Card order doesn't matter, and the leftover 14th card is discarded for you.
 - With the turn timer on, running out of time before drawing skips your turn. Running out after drawing discards the card you drew.
 
+## 🧮 Scoring (count)
+
+A match is played over several rounds:
+
+- When someone declares, they score **0** for the round. Every other player adds the **count** of their cards that aren't in a set or sequence, using the lowest possible arrangement of their hand.
+- Card values: number cards count their number; **A, K, Q, J count 10**; **jokers and wilds count 0**.
+- Melds only protect cards if the hand has a **life** (at least one pure sequence). Without one, **every card counts**.
+- A single round's count is **capped at 80**.
+- Totals carry over between rounds. Anyone whose total goes **over the elimination limit** (200 by default, set in the lobby) is out.
+- The match ends when only one player is left, or when you choose **End match** between rounds. The **lowest total wins**.
+- If you're eliminated, you can watch the bots finish the match (with fast forward) or skip straight to the final standings.
+
 ## 🗂️ Code layout
 
 ```
@@ -61,8 +74,9 @@ src/
     engine.js       Game state, actions (draw/discard/declare/reorder/timeout), per-player views
     bot.js          Bot strategy (sees only its own player view)
     groups.js       How the player has grouped their hand (labels, auto-arrange)
+    match.js        Rounds, count scoring, eliminations and standings
   audio/sounds.js   Web Audio: card samples plus synthesized chimes, mute setting
-  components/       React UI (Lobby, GameTable, Hand, Seat, Piles, Card, GameOver, Tutorial)
+  components/       React UI (Lobby, GameTable, Hand, Seat, Piles, Card, Scoreboard, MatchOver, Tutorial)
   App.jsx           Wires the engine to the UI: event sounds, bot pacing, timer, hints
 public/sounds/      Card sound effects
 ```

@@ -88,3 +88,23 @@ export const CrownIcon = ({ className = 'w-6 h-6' }) => (
         <rect x="4" y="20" width="16" height="2" rx="1" fill="currentColor" />
     </svg>
 );
+
+export const TrophyIcon = (p) => (
+    <Icon {...p}>
+        <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z" />
+        <path d="M17 6h3a3 3 0 0 1-3 4M7 6H4a3 3 0 0 0 3 4" />
+    </Icon>
+);
+
+export const ScoresIcon = (p) => (
+    <Icon {...p}>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 10h18M9 4v16" />
+    </Icon>
+);
+
+export const FastForwardIcon = (p) => (
+    <Icon {...p}>
+        <path d="m13 19 9-7-9-7v14zM2 19l9-7-9-7v14z" />
+    </Icon>
+);

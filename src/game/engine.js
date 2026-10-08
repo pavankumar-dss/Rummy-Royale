@@ -12,7 +12,7 @@ const LOG_LIMIT = 6;
 
 const deadlineFrom = (turnSeconds, now) => (turnSeconds ? now + turnSeconds * 1000 : null);
 
-export function createGame({ players, turnSeconds = 0, rng = Math.random, now = Date.now() }) {
+export function createGame({ players, turnSeconds = 0, firstPlayer = 0, rng = Math.random, now = Date.now() }) {
     if (players.length < 2 || players.length > 6) throw new Error('Rummy needs 2 to 6 players');
 
     const deck = shuffle(createDeck(decksForPlayers(players.length)), rng);
@@ -35,7 +35,7 @@ export function createGame({ players, turnSeconds = 0, rng = Math.random, now = 
         discardPile: [deck.pop()],
         wildCard,
         wildRank,
-        currentPlayer: 0,
+        currentPlayer: firstPlayer % players.length,
         phase: 'DRAW',
         drawnCard: null, // { id, fromDiscard } for the current turn
         turn: 1,
