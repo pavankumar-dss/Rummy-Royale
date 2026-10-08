@@ -126,7 +126,7 @@ test('bots play full games to a finish without illegal moves', () => {
         let steps = 0;
         while (g.status === 'PLAYING' && steps < 2000) {
             const id = g.currentPlayer;
-            const { state, error } = applyAction(g, id, chooseBotAction(getPlayerView(g, id)), { now: NOW, rng });
+            const { state, error } = applyAction(g, id, chooseBotAction(getPlayerView(g, id), { rng }), { now: NOW, rng });
             assert.equal(error, null, `seed ${seed} step ${steps}`);
             g = state;
             steps++;

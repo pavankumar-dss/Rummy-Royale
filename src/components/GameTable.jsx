@@ -21,6 +21,7 @@ import {
     CrownIcon,
     ExitIcon,
     FastForwardIcon,
+    FlagIcon,
     GroupIcon,
     HelpIcon,
     LayersIcon,
@@ -30,6 +31,7 @@ import {
     VolumeIcon,
 } from './icons';
 import { isWild } from '../game/cards.js';
+import { DROP_POINTS } from '../game/engine.js';
 import { NEW_GROUP, handProgress, moveCards } from '../game/groups.js';
 import { play } from '../audio/sounds.js';
 
@@ -112,10 +114,11 @@ export default function GameTable({
     roundNumber,
     seatTotals,
     limit,
-    spectator,
+    sitOut,
     fastForward,
     onToggleFastForward,
     onSkipToEnd,
+    onSkipRound,
     onShowScores,
     onGroupsChange,
     onToggleSelect,
@@ -124,6 +127,7 @@ export default function GameTable({
     onDraw,
     onDiscard,
     onDeclare,
+    onDrop,
     onSort,
     onAutoArrange,
     onHint,
@@ -213,6 +217,11 @@ export default function GameTable({
             ? 'Select a card to discard, or declare if your hand is ready'
             : `Waiting for ${current.name}…`;
     const activeCard = activeId && cardsById.get(activeId);
+
+    // Dropping is final for the round, so it takes a second press to confirm.
+    const [dropTurn, setDropTurn] = useState(null); // the turn on which Drop was pressed
+    const dropPoints = me ? DROP_POINTS[me.turns === 0 ? 'first' : 'middle'] : 0;
+    const askDrop = canDraw && dropTurn === view.turn;
 
     return (
         <DndContext
@@ -312,15 +321,26 @@ export default function GameTable({
                         )}
                     </AnimatePresence>
 
-                    {spectator ? (
+                    {sitOut ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 py-2">
                             <div>
-                                <p className="font-display font-bold text-lg text-red-200">You&apos;re out</p>
-                                <p className="text-sm text-white/60">
-                                    Eliminated in round {spectator.eliminatedIn}. Watching the bots play out the match.
-                                </p>
+                                {sitOut.kind === 'dropped' ? (
+                                    <>
+                                        <p className="font-display font-bold text-lg text-gold-200">You dropped this round</p>
+                                        <p className="text-sm text-white/60">
+                                            +{sitOut.points} points. {playing ? 'Sit back while the others play it out.' : 'Round over.'}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="font-display font-bold text-lg text-red-200">You&apos;re out</p>
+                                        <p className="text-sm text-white/60">
+                                            Eliminated in round {sitOut.round}. Watching the bots play out the match.
+                                        </p>
+                                    </>
+                                )}
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                                 <button
                                     className={`btn px-4 py-2 text-sm ${fastForward ? 'btn-gold' : 'btn-ghost'}`}
                                     onClick={onToggleFastForward}
@@ -328,9 +348,15 @@ export default function GameTable({
                                 >
                                     <FastForwardIcon className="w-4 h-4" /> Fast forward
                                 </button>
-                                <button className="btn btn-ghost px-4 py-2 text-sm" onClick={onSkipToEnd}>
-                                    Skip to final standings
-                                </button>
+                                {sitOut.kind === 'dropped' ? (
+                                    <button className="btn btn-ghost px-4 py-2 text-sm" onClick={onSkipRound} disabled={!playing}>
+                                        Skip to round results
+                                    </button>
+                                ) : (
+                                    <button className="btn btn-ghost px-4 py-2 text-sm" onClick={onSkipToEnd}>
+                                        Skip to final standings
+                                    </button>
+                                )}
                             </div>
                         </div>
                     ) : (
@@ -373,6 +399,15 @@ export default function GameTable({
                                     <span className="hidden sm:inline">Hint</span>
                                 </button>
                                 <button
+                                    className={`btn btn-ghost px-3 py-2 text-sm ${hint?.kind === 'drop' ? 'animate-glow' : ''}`}
+                                    onClick={() => setDropTurn(view.turn)}
+                                    disabled={!canDraw}
+                                    title={`Fold this round for ${dropPoints} points`}
+                                >
+                                    <FlagIcon className="w-4 h-4" />
+                                    <span className="hidden sm:inline">Drop</span>
+                                </button>
+                                <button
                                     className={`btn btn-gold px-4 sm:px-5 py-2 text-sm font-display tracking-wide ${hint?.kind === 'declare' ? 'animate-glow' : ''}`}
                                     onClick={onDeclare}
                                     disabled={!canDiscard}
@@ -383,8 +418,37 @@ export default function GameTable({
                         </div>
 
                         <AnimatePresence>
-                            {selectedIds.length > 0 && (
+                            {askDrop && (
                                 <motion.div
+                                    key="drop"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="flex flex-wrap items-center justify-center gap-2 pt-3 text-sm">
+                                        <span className="text-white/75">
+                                            Drop this round? You add <strong className="text-gold-200">{dropPoints} points</strong> and sit
+                                            out until the next deal.
+                                        </span>
+                                        <button
+                                            className="btn btn-gold px-3 py-1.5"
+                                            onClick={() => {
+                                                setDropTurn(null);
+                                                onDrop();
+                                            }}
+                                        >
+                                            Drop
+                                        </button>
+                                        <button className="btn btn-ghost px-3 py-1.5" onClick={() => setDropTurn(null)}>
+                                            Keep playing
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                            {selectedIds.length > 0 && !askDrop && (
+                                <motion.div
+                                    key="selection"
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import Card from './Card';
 import { CrownIcon, HelpIcon, MuteIcon, VolumeIcon } from './icons';
+import { BOT_LEVELS } from '../game/bot.js';
 
 const TIMER_OPTIONS = [
     { label: 'Off', seconds: 0 },
@@ -31,12 +32,13 @@ const Option = ({ selected, onClick, children }) => (
 const Lobby = ({ initialSettings, muted, onToggleMute, onHelp, onStart }) => {
     const [name, setName] = useState(initialSettings.name);
     const [bots, setBots] = useState(initialSettings.bots);
+    const [level, setLevel] = useState(initialSettings.level);
     const [turnSeconds, setTurnSeconds] = useState(initialSettings.turnSeconds);
     const [limit, setLimit] = useState(initialSettings.limit);
 
     const start = (e) => {
         e.preventDefault();
-        onStart({ name: name.trim() || 'You', bots, turnSeconds, limit });
+        onStart({ name: name.trim() || 'You', bots, level, turnSeconds, limit });
     };
 
     return (
@@ -105,6 +107,18 @@ const Lobby = ({ initialSettings, muted, onToggleMute, onHelp, onStart }) => {
                             </Option>
                         ))}
                     </div>
+                </fieldset>
+
+                <fieldset>
+                    <legend className="text-xs font-semibold uppercase tracking-[0.18em] mb-1.5 text-gold-200/80">Bot skill</legend>
+                    <div className="flex gap-2">
+                        {Object.entries(BOT_LEVELS).map(([key, { label }]) => (
+                            <Option key={key} selected={level === key} onClick={() => setLevel(key)}>
+                                {label}
+                            </Option>
+                        ))}
+                    </div>
+                    <span className="block mt-1 text-[0.7rem] text-white/45">{BOT_LEVELS[level].blurb}</span>
                 </fieldset>
 
                 <fieldset>

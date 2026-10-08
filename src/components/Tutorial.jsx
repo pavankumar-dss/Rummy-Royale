@@ -75,6 +75,16 @@ const STEPS = [
             </div>
         ),
     },
+    {
+        title: 'Counting, and knowing when to fold',
+        body: 'When someone declares, everyone else adds up their unmatched cards (A, K, Q, J count 10, jokers 0). Lowest total wins the match. Dealt a bad hand? Drop before you draw for just 20 points, or 40 later on.',
+        art: (
+            <div className="flex flex-wrap justify-center gap-6">
+                <Row labels={['K♠', 'Q♥', '9♦']} caption="Unmatched: 29 points" ok={false} />
+                <Row labels={['7♣', '2♥', 'J♠']} caption="Drop now: 20 points" ok={false} />
+            </div>
+        ),
+    },
 ];
 
 export default function Tutorial({ onClose }) {

@@ -108,3 +108,10 @@ export const FastForwardIcon = (p) => (
         <path d="m13 19 9-7-9-7v14zM2 19l9-7-9-7v14z" />
     </Icon>
 );
+
+export const FlagIcon = (p) => (
+    <Icon {...p}>
+        <path d="M5 21V4" />
+        <path d="M5 4h11l-2 4 2 4H5" />
+    </Icon>
+);

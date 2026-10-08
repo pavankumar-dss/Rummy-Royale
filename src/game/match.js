@@ -1,10 +1,12 @@
-import { applyAction, createGame } from './engine.js';
+import { DROP_POINTS, applyAction, createGame } from './engine.js';
 import { scoreHand } from './melds.js';
 
 /*
  * A match is a series of rounds with running counts ("count" scoring):
  * - When someone declares, every other player adds the count of their unmatched
  *   cards (see scoreHand), capped at ROUND_CAP for the round. The winner adds 0.
+ * - A player who drops (folds) adds 20 before ever drawing, or 40 later on,
+ *   whatever happens in the rest of the round.
  * - Anyone whose total goes over the limit is eliminated and sits out later rounds.
  * - The match ends when one player (or none) is left, or when it is ended early;
  *   the lowest total among the survivors wins.
@@ -27,12 +29,20 @@ function dealRound(match, { rng = Math.random, now = Date.now() } = {}) {
     return { ...match, roundNumber, seats, game, status: 'PLAYING' };
 }
 
+/** `players`: [{ name, isBot, level? }]; a bot's level is 'easy' | 'medium' | 'hard' (see bot.js). */
 export function createMatch({ players, limit = DEFAULT_LIMIT, turnSeconds = 0, rng = Math.random, now = Date.now() }) {
     const match = {
         id: Math.floor(rng() * 2 ** 32).toString(36),
         limit,
         turnSeconds,
-        players: players.map((p, id) => ({ id, name: p.name, isBot: Boolean(p.isBot), total: 0, eliminatedIn: null })),
+        players: players.map((p, id) => ({
+            id,
+            name: p.name,
+            isBot: Boolean(p.isBot),
+            level: p.isBot ? (p.level ?? 'medium') : null,
+            total: 0,
+            eliminatedIn: null,
+        })),
         rounds: [],
         roundNumber: 0,
         seats: [], // match player id for each seat in the current round's game
@@ -43,15 +53,21 @@ export function createMatch({ players, limit = DEFAULT_LIMIT, turnSeconds = 0, r
     return dealRound(match, { rng, now });
 }
 
-// Counts for every seat in a finished game. A round with no winner (deck ran out) scores nothing.
+// Counts for every seat in a finished game. Drops always cost their penalty; otherwise
+// a round with no winner (deck ran out) scores nothing.
 export function scoreRound(game) {
     const winnerSeat = game.winner?.playerId ?? null;
     return game.players.map((p) => {
+        if (p.dropped) {
+            const count = DROP_POINTS[p.dropped];
+            return { seat: p.id, count, raw: count, capped: false, hasLife: null, melds: [], deadwood: [], dropped: p.dropped };
+        }
         if (winnerSeat === null) {
             return { seat: p.id, count: 0, raw: 0, capped: false, hasLife: null, melds: [], deadwood: p.hand };
         }
         if (p.id === winnerSeat) {
-            return { seat: p.id, count: 0, raw: 0, capped: false, hasLife: true, melds: game.winner.melds, deadwood: [], winner: true };
+            const byDrops = Boolean(game.winner.byDrops);
+            return { seat: p.id, count: 0, raw: 0, capped: false, hasLife: true, melds: game.winner.melds, deadwood: [], winner: true, byDrops };
         }
         const { count, hasLife, melds, deadwood } = scoreHand(p.hand, game.wildRank);
         return { seat: p.id, count: Math.min(count, ROUND_CAP), raw: count, capped: count > ROUND_CAP, hasLife, melds, deadwood };

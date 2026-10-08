@@ -18,7 +18,8 @@ const ThinkingDots = () => (
 
 // An opponent around the table: fanned card backs, avatar with timer ring and name plate.
 const Seat = ({ player, active, progress, total, limit, dealing, dealDelay = 0 }) => {
-    const count = player.handCount;
+    const dropped = Boolean(player.dropped);
+    const count = dropped ? 0 : player.handCount; // a dropped hand is folded away
     return (
         <div className="flex flex-col items-center gap-1.5 min-w-0">
             <div className="relative h-[calc(var(--card-w)*0.62)] w-[calc(var(--card-w)*1.6)]">
@@ -39,11 +40,23 @@ const Seat = ({ player, active, progress, total, limit, dealing, dealDelay = 0 }
                         );
                     })}
                 </AnimatePresence>
+                <AnimatePresence>
+                    {dropped && (
+                        <motion.span
+                            className="absolute inset-x-0 bottom-1 mx-auto w-max rounded-full bg-black/55 px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gold-200 ring-1 ring-gold-500/40"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0 }}
+                        >
+                            Dropped
+                        </motion.span>
+                    )}
+                </AnimatePresence>
             </div>
             <div
                 className={`flex items-center gap-2 rounded-full pl-1 pr-3 py-1 transition-colors ${
                     active ? 'bg-gold-500/20 ring-1 ring-gold-400/70' : 'bg-black/30'
-                }`}
+                } ${dropped ? 'opacity-55' : ''}`}
             >
                 <Avatar player={player} size={36} progress={active ? progress : null} active={active} />
                 <div className="leading-tight min-w-0">
@@ -52,7 +65,7 @@ const Seat = ({ player, active, progress, total, limit, dealing, dealDelay = 0 }
                         {active && <ThinkingDots />}
                     </p>
                     <p className="text-[0.65rem] text-gold-200/70 whitespace-nowrap">
-                        <span className="hidden sm:inline">{count} cards · </span>
+                        {!dropped && <span className="hidden sm:inline">{count} cards · </span>}
                         <span className={`font-semibold tabular-nums ${total > limit * 0.75 ? 'text-amber-300' : ''}`}>{total} pts</span>
                     </p>
                 </div>

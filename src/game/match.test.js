@@ -43,7 +43,7 @@ function playRound(match, rng) {
     let m = match;
     for (let steps = 0; m.status === 'PLAYING' && steps < 3000; steps++) {
         const seat = m.game.currentPlayer;
-        const { match: next, error } = applyMatchAction(m, seat, chooseBotAction(getPlayerView(m.game, seat)), { now: NOW, rng });
+        const { match: next, error } = applyMatchAction(m, seat, chooseBotAction(getPlayerView(m.game, seat), { rng }), { now: NOW, rng });
         assert.equal(error, null);
         m = next;
     }

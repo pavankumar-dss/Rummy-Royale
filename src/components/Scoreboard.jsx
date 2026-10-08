@@ -69,6 +69,11 @@ export function ScoreTable({ match, humanId }) {
                                                 <span className="text-white/25">–</span>
                                             ) : r.winnerId === p.id ? (
                                                 <CrownIcon className="w-4 h-4 inline text-gold-400" />
+                                            ) : result.dropped ? (
+                                                <span title={`Dropped (${result.dropped === 'first' ? 'first' : 'middle'} drop)`}>
+                                                    {result.count}
+                                                    <span className="ml-0.5 text-[0.6rem] font-semibold text-gold-300/80">D</span>
+                                                </span>
                                             ) : (
                                                 result.count
                                             )}
@@ -89,7 +94,7 @@ export function ScoreTable({ match, humanId }) {
                 </tbody>
             </table>
             <p className="px-3 py-1.5 text-[0.65rem] text-white/45 border-t border-white/5">
-                Over {limit} and you&apos;re out · max {ROUND_CAP} per round
+                Over {limit} and you&apos;re out · max {ROUND_CAP} per round · D = dropped
             </p>
         </div>
     );
@@ -128,10 +133,11 @@ function ResultRow({ result, player, isHuman, wildRank, total }) {
             <div className="flex items-center gap-2 mb-2">
                 <Avatar player={player} size={30} />
                 <span className="font-semibold text-sm">{name}</span>
-                {result.winner && <Tag tone="gold">Declared</Tag>}
+                {result.winner && <Tag tone="gold">{result.byDrops ? 'Last one in' : 'Declared'}</Tag>}
+                {result.dropped && <Tag tone="neutral">{result.dropped === 'first' ? 'First drop' : 'Middle drop'}</Tag>}
                 {result.hasLife === false && <Tag tone="bad">No life: every card counts</Tag>}
                 {result.capped && <Tag tone="neutral">Capped at {ROUND_CAP} (was {result.raw})</Tag>}
-                <span className="ml-auto text-right leading-tight">
+                <span className="ml-auto pl-2 text-right leading-tight">
                     <span className={`block font-display font-bold text-xl ${result.count ? 'text-red-200' : 'text-emerald-200'}`}>
                         +{result.count}
                     </span>
@@ -156,6 +162,15 @@ function ResultRow({ result, player, isHuman, wildRank, total }) {
     );
 }
 
+function roundSubtitle(round, winner) {
+    const drops = round.results.filter((r) => r.dropped).length;
+    if (round.results.some((r) => r.byDrops)) return 'Everyone else dropped out, so the last player in takes the round.';
+    if (!winner) return drops ? 'The deck ran out. Only the drops score.' : 'The deck ran out, so nobody scores.';
+    return drops
+        ? 'Drops pay their fixed penalty; everyone else adds the count of their unmatched cards.'
+        : 'Everyone else adds the count of their unmatched cards.';
+}
+
 /** Shown after every round: who declared, everyone's count, eliminations and totals. */
 export function RoundSummary({ match, humanId, onNext, onEnd, onStandings }) {
     const round = match.rounds.at(-1);
@@ -175,7 +190,7 @@ export function RoundSummary({ match, humanId, onNext, onEnd, onStandings }) {
                         {youWon ? 'You win the round!' : winner ? `${winner.name} wins the round` : 'No winner this round'}
                     </h2>
                     <p className="mt-1 text-sm text-white/60">
-                        {winner ? 'Everyone else adds the count of their unmatched cards.' : 'The deck ran out, so nobody scores.'}
+                        {roundSubtitle(round, winner)}
                     </p>
                 </div>
 

@@ -60,9 +60,22 @@ A match is played over several rounds:
 - Card values: number cards count their number; **A, K, Q, J count 10**; **jokers and wilds count 0**.
 - Melds only protect cards if the hand has a **life** (at least one pure sequence). Without one, **every card counts**.
 - A single round's count is **capped at 80**.
+- **Dropping:** at the start of your turn, before drawing, you can fold the round. It costs **20** if you haven't drawn a card yet this round (first drop) or **40** later (middle drop), and you sit out until the next deal. If everyone else drops, the last player in wins the round.
 - Totals carry over between rounds. Anyone whose total goes **over the elimination limit** (200 by default, set in the lobby) is out.
 - The match ends when only one player is left, or when you choose **End match** between rounds. The **lowest total wins**.
 - If you're eliminated, you can watch the bots finish the match (with fast forward) or skip straight to the final standings.
+
+## 🤖 Bot skill
+
+Pick it in the lobby; it applies to every bot at the table.
+
+- **Easy:** loose discards, holds on to high cards, only takes a discard that completes a meld, never drops.
+- **Medium:** decent play with slightly loose discards; drops only hopeless opening hands.
+- **Hard:** counts live cards (what has been discarded or picked up), avoids feeding the next player, sheds high cards as the round goes on, and drops weak hands, more readily when close to the limit.
+
+In simulated 3-player matches (limit 200) against two Medium bots, Hard won about 39% and Easy about 12% (a fair share is 33%). Rummy with plenty of wilds is luck-heavy, so even Easy bots win sometimes.
+
+Bots only ever see their own player view, never other hands or the deck. The Hint button uses the Hard bot's judgement, so it may suggest dropping.
 
 ## 🗂️ Code layout
 
@@ -71,8 +84,8 @@ src/
   game/             Pure game logic. No React, fully unit-tested.
     cards.js        Deck, shuffling, sorting, card helpers
     melds.js        Meld classification and the hand solver (declaration check)
-    engine.js       Game state, actions (draw/discard/declare/reorder/timeout), per-player views
-    bot.js          Bot strategy (sees only its own player view)
+    engine.js       Game state, actions (draw/discard/declare/drop/reorder/timeout), per-player views
+    bot.js          Bot strategy and skill levels (sees only its own player view)
     groups.js       How the player has grouped their hand (labels, auto-arrange)
     match.js        Rounds, count scoring, eliminations and standings
   audio/sounds.js   Web Audio: card samples plus synthesized chimes, mute setting

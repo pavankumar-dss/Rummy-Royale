@@ -8,7 +8,7 @@ import Tutorial from './components/Tutorial';
 import { Overlay, Panel, RoundSummary, ScoreTable } from './components/Scoreboard';
 import { CardDefs } from './components/Card';
 import { DEAL_START_S, DEAL_STEP_S } from './components/Hand';
-import { getPlayerView } from './game/engine.js';
+import { DROP_POINTS, getPlayerView } from './game/engine.js';
 import { applyMatchAction, createMatch, endMatch, seatOf, standings, startNextRound } from './game/match.js';
 import { chooseBotAction } from './game/bot.js';
 import { cardLabel } from './game/cards.js';
@@ -21,13 +21,22 @@ const FAST_BOT_STEP_MS = 180;
 const DEAL_MS = 2300; // shuffle + deal animation before play starts
 const NOTICE_MS = 3800;
 const TUTORIAL_KEY = 'rummy-royale:tutorial-seen';
-const DEFAULT_SETTINGS = { name: 'You', bots: 2, turnSeconds: 30, limit: 200 };
+const DEFAULT_SETTINGS = { name: 'You', bots: 2, level: 'medium', turnSeconds: 30, limit: 200 };
 const NO_CARDS = [];
 
-function newMatch({ name, bots, turnSeconds, limit }) {
-    const players = [{ name, isBot: false }, ...Array.from({ length: bots }, (_, i) => ({ name: `Bot ${i + 1}`, isBot: true }))];
+function newMatch({ name, bots, level, turnSeconds, limit }) {
+    const players = [
+        { name, isBot: false },
+        ...Array.from({ length: bots }, (_, i) => ({ name: `Bot ${i + 1}`, isBot: true, level })),
+    ];
     // The first turn's clock starts once the deal animation has finished.
     return createMatch({ players, limit, turnSeconds, now: Date.now() + DEAL_MS });
+}
+
+// What a seat's player would do now. Bots also weigh their match total against the limit.
+function suggestMove(match, seat, level) {
+    const player = match.players[match.seats[seat]];
+    return chooseBotAction(getPlayerView(match.game, seat), { level: level ?? player.level, total: player.total, limit: match.limit });
 }
 
 function readFlag(key) {
@@ -66,7 +75,12 @@ function playEventSound(event, humanSeat) {
         case 'timeout-skip':
             play('invalid', { volume: 0.6 });
             break;
+        case 'drop':
+            play('fan', { volume: mine ? 0.9 : 0.6 });
+            play('chipsHandle', { delay: 0.25, volume: mine ? 1 : 0.6 });
+            break;
         case 'declare':
+        case 'last-standing':
             play('fan');
             if (mine) {
                 play('win', { delay: 0.3 });
@@ -90,16 +104,18 @@ function celebrate() {
     );
 }
 
-// Plays every remaining round instantly with bot moves (used once the human is out).
-function simulateToEnd(match) {
+// Plays on instantly with bot moves, to the end of this round or of the whole match
+// (used once the human has dropped or been eliminated).
+function simulate(match, { untilRoundOver = false } = {}) {
     let m = match;
     for (let guard = 0; m.status !== 'FINISHED' && guard < 50000; guard++) {
         if (m.status === 'ROUND_OVER') {
+            if (untilRoundOver) break;
             m = startNextRound(m);
             continue;
         }
         const seat = m.game.currentPlayer;
-        const result = applyMatchAction(m, seat, chooseBotAction(getPlayerView(m.game, seat)));
+        const result = applyMatchAction(m, seat, suggestMove(m, seat));
         if (result.error) break;
         m = result.match;
     }
@@ -128,6 +144,14 @@ function App() {
     // The UI only ever reads the human player's view, never the raw game state.
     const view = game && getPlayerView(game, humanSeat);
     const hand = (humanSeat !== -1 && view?.players[humanSeat].hand) || NO_CARDS;
+    const human = match?.players[HUMAN_ID];
+    const me = humanSeat !== -1 ? view?.players[humanSeat] : null;
+    const sitOut =
+        humanSeat === -1
+            ? { kind: 'eliminated', round: human?.eliminatedIn }
+            : me?.dropped
+              ? { kind: 'dropped', points: DROP_POINTS[me.dropped] }
+              : null;
     const wildRank = game?.wildRank;
     const groups = useMemo(() => reconcileGroups(groupState, hand, wildRank), [groupState, hand, wildRank]);
     const selected = useMemo(() => selectedIds.filter((id) => hand.some((c) => c.id === id)), [selectedIds, hand]);
@@ -183,7 +207,7 @@ function App() {
         if (!bot.isBot) return;
         const timer = setTimeout(
             () => {
-                const ok = dispatch(bot.id, chooseBotAction(getPlayerView(game, bot.id)));
+                const ok = dispatch(bot.id, suggestMove(match, bot.id));
                 if (!ok) {
                     // Never let a bot bug freeze the game.
                     const fallback =
@@ -196,7 +220,7 @@ function App() {
             fastForward ? FAST_BOT_STEP_MS : BOT_STEP_MS,
         );
         return () => clearTimeout(timer);
-    }, [match?.status, game, dealing, fastForward, dispatch]);
+    }, [match, game, dealing, fastForward, dispatch]);
 
     // Turn timer: tick the clock, sound the last five seconds, time the human out.
     useEffect(() => {
@@ -255,7 +279,9 @@ function App() {
     };
 
     const nextRound = () => {
-        setMatch(startNextRound(match, { now: Date.now() + DEAL_MS }));
+        const next = startNextRound(match, { now: Date.now() + DEAL_MS });
+        setMatch(next);
+        if (seatOf(next, HUMAN_ID) !== -1) setFastForward(false); // back at the table after sitting out a drop
         resetRoundUi();
     };
 
@@ -265,10 +291,16 @@ function App() {
     };
 
     const skipToEnd = () => {
-        const finished = simulateToEnd(match);
+        const finished = simulate(match);
         lastSeq.current = finished.game.log.at(-1).seq; // don't replay the skipped rounds' sounds
         setMatch(finished);
         setShowStandings(true);
+    };
+
+    const skipRound = () => {
+        const next = simulate(match, { untilRoundOver: true });
+        lastSeq.current = next.game.log.at(-1).seq;
+        setMatch(next);
     };
 
     const quit = () => {
@@ -304,10 +336,14 @@ function App() {
     };
 
     const showHint = () => {
-        const action = chooseBotAction(view);
+        const action = suggestMove(match, humanSeat, 'hard');
         let next;
         let text;
-        if (action.type === 'draw') {
+        if (action.type === 'drop') {
+            const points = DROP_POINTS[me.turns === 0 ? 'first' : 'middle'];
+            next = { kind: 'drop' };
+            text = `This hand looks weak. Dropping now costs ${points} points, less than it's likely to cost if you play on.`;
+        } else if (action.type === 'draw') {
             next = { kind: 'pile', source: action.source };
             text =
                 action.source === 'discard'
@@ -325,7 +361,6 @@ function App() {
         play('hint');
     };
 
-    const human = match?.players[HUMAN_ID];
 
     return (
         <MotionConfig reducedMotion="user">
@@ -347,10 +382,11 @@ function App() {
                     roundNumber={match.roundNumber}
                     seatTotals={match.seats.map((id) => match.players[id].total)}
                     limit={match.limit}
-                    spectator={humanSeat === -1 ? { eliminatedIn: human.eliminatedIn } : null}
+                    sitOut={sitOut}
                     fastForward={fastForward}
                     onToggleFastForward={() => setFastForward(!fastForward)}
                     onSkipToEnd={skipToEnd}
+                    onSkipRound={skipRound}
                     onShowScores={() => setShowScores(true)}
                     onGroupsChange={setGroupState}
                     onToggleSelect={toggleSelect}
@@ -359,6 +395,7 @@ function App() {
                     onDraw={(source) => dispatch(humanSeat, { type: 'draw', source })}
                     onDiscard={discard}
                     onDeclare={() => dispatch(humanSeat, { type: 'declare' })}
+                    onDrop={() => dispatch(humanSeat, { type: 'drop' })}
                     onSort={() => regroup(groupBySuit(hand, wildRank))}
                     onAutoArrange={() => regroup(arrangeGroups(hand, wildRank))}
                     onHint={showHint}

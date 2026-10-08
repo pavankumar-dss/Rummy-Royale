@@ -8,6 +8,11 @@ import { findDeclaration } from './melds.js';
  */
 
 export const HAND_SIZE = 13;
+// Points for folding a round: before ever drawing ("first drop") or later ("middle drop").
+export const DROP_POINTS = { first: 20, middle: 40 };
+// The discard pile is reshuffled into a new deck at most this many times a round. When
+// the deck runs out again the round is a draw, so a deadlocked table can't play forever.
+export const MAX_RESHUFFLES = 2;
 const LOG_LIMIT = 6;
 
 const deadlineFrom = (turnSeconds, now) => (turnSeconds ? now + turnSeconds * 1000 : null);
@@ -21,6 +26,8 @@ export function createGame({ players, turnSeconds = 0, firstPlayer = 0, rng = Ma
         name: p.name,
         isBot: Boolean(p.isBot),
         hand: deck.splice(0, HAND_SIZE),
+        turns: 0, // turns on which they drew a card
+        dropped: null, // 'first' | 'middle' once they fold the round
     }));
 
     // If the cut card is a printed joker, aces become wild.
@@ -41,7 +48,9 @@ export function createGame({ players, turnSeconds = 0, firstPlayer = 0, rng = Ma
         turn: 1,
         turnSeconds,
         turnDeadline: deadlineFrom(turnSeconds, now),
-        winner: null, // { playerId, melds } once someone declares
+        reshuffles: 0,
+        winner: null, // { playerId, melds, byDrops? } once someone declares or everyone else drops
+        history: [], // public record of discard-pile traffic: { playerId, type: 'pick' | 'discard', card }
         eventSeq: 1,
         log: [{ seq: 1, turn: 1, playerId: null, type: 'deal', text: 'Cards dealt. Good luck!' }],
     };
@@ -53,8 +62,17 @@ function addLog(state, playerId, type, text) {
     state.log = [...state.log, { seq: state.eventSeq, turn: state.turn, playerId, type, text }].slice(-LOG_LIMIT);
 }
 
+// The next seat after `from` that is still in the round.
+export function nextActive(players, from) {
+    for (let step = 1; step <= players.length; step++) {
+        const id = (from + step) % players.length;
+        if (!players[id].dropped) return id;
+    }
+    return from;
+}
+
 function endTurn(state, now) {
-    state.currentPlayer = (state.currentPlayer + 1) % state.players.length;
+    state.currentPlayer = nextActive(state.players, state.currentPlayer);
     state.phase = 'DRAW';
     state.drawnCard = null;
     state.turn += 1;
@@ -71,6 +89,7 @@ function finish(state, winner) {
 function discardCard(state, player, index) {
     const [card] = player.hand.splice(index, 1);
     state.discardPile.push(card);
+    state.history.push({ playerId: player.id, type: 'discard', card });
     return card;
 }
 
@@ -84,16 +103,18 @@ const handlers = {
             const card = state.discardPile.pop();
             player.hand.push(card);
             state.drawnCard = { id: card.id, fromDiscard: true };
+            state.history.push({ playerId, type: 'pick', card });
             addLog(state, playerId, 'pick', `picked ${cardLabel(card)} from the discard pile`);
         } else {
-            if (state.deck.length === 0) {
+            if (state.deck.length === 0 && state.reshuffles < MAX_RESHUFFLES) {
                 // Reshuffle everything under the top discard into a new deck.
                 const top = state.discardPile.pop();
                 state.deck = shuffle(state.discardPile, rng);
                 state.discardPile = top ? [top] : [];
+                state.reshuffles += 1;
             }
             if (state.deck.length === 0) {
-                addLog(state, playerId, 'deck-empty', 'found the deck empty. The game ends in a draw');
+                addLog(state, null, 'deck-empty', 'The deck ran out. Nobody wins this round');
                 finish(state, null);
                 return null;
             }
@@ -102,6 +123,7 @@ const handlers = {
             state.drawnCard = { id: card.id, fromDiscard: false };
             addLog(state, playerId, 'draw', 'drew from the deck');
         }
+        player.turns += 1;
         state.phase = 'DISCARD';
         return null;
     },
@@ -131,6 +153,24 @@ const handlers = {
         player.hand = result.melds.flatMap((m) => m.cards);
         addLog(state, playerId, 'declare', `declared and discarded ${cardLabel(result.discard)}`);
         finish(state, { playerId, melds: result.melds });
+        return null;
+    },
+
+    // Fold the round for a fixed penalty. Only at the start of a turn, before drawing.
+    drop(state, playerId, _action, { now }) {
+        if (state.phase !== 'DRAW') return 'You can only drop at the start of your turn, before you draw.';
+        const player = state.players[playerId];
+        player.dropped = player.turns === 0 ? 'first' : 'middle';
+        addLog(state, playerId, 'drop', `dropped out of the round (${DROP_POINTS[player.dropped]} points)`);
+
+        const remaining = state.players.filter((p) => !p.dropped);
+        if (remaining.length === 1) {
+            const [last] = remaining;
+            addLog(state, last.id, 'last-standing', 'won the round. Everyone else dropped');
+            finish(state, { playerId: last.id, melds: [], byDrops: true });
+        } else {
+            endTurn(state, now);
+        }
         return null;
     },
 
@@ -167,7 +207,7 @@ const handlers = {
     },
 };
 
-const TURN_ACTIONS = new Set(['draw', 'discard', 'declare']);
+const TURN_ACTIONS = new Set(['draw', 'discard', 'declare', 'drop']);
 
 /**
  * Applies one player's action. Never mutates `state`.
@@ -200,7 +240,8 @@ export function getPlayerView(state, viewerId) {
         deckCount: deck.length,
         discardCount: discardPile.length,
         discardTop: discardPile.at(-1) ?? null,
-        discardRecent: discardPile.slice(-3), // the pile is public; the UI shows a few cards peeking out
+        discardRecent: discardPile.slice(-3), // the UI shows a few cards peeking out
+        discards: discardPile, // the whole pile is public (bots use it to count live cards)
         drawnCard: state.currentPlayer === viewerId ? drawnCard : null,
         players: state.players.map(({ hand, ...p }) =>
             p.id === viewerId || revealAll ? { ...p, hand, handCount: hand.length } : { ...p, handCount: hand.length },
