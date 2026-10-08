@@ -1,111 +1,61 @@
 # 🂡 Rummy Royale
 
-A modern, full-stack implementation of the classic Rummy card game, built with **React**, **Node.js**, and **Tailwind CSS**. 
+Indian Rummy in the browser, built with **React**, **Vite** and **Tailwind CSS**. Play against 1–3 bots, with drag-and-drop hand sorting and an optional turn timer.
 
-Experience smooth gameplay with drag-and-drop mechanics, multiplayer lobbies, and smart bot opponents.
+Everything runs in the browser. There is no server, so it is hosted for free on GitHub Pages.
+
+**Play:** https://pavankumar-dss.github.io/Rummy-Royale/
 
 ---
 
-## 🚀 How to Run
+## 🚀 Run locally
 
-### Prerequisites
--   **Node.js** (v14 or higher)
--   **npm** (Node Package Manager)
+Requires **Node.js 20.19+**.
 
-### 1. Installation
-
-**Option A: One-Click Install (Recommended)**
-Double-click the `install_dependencies.bat` file in the root directory.
-
-**Option B: Manual Install**
-Open your terminal and install dependencies for both the **Server** (Backend) and **Client** (Frontend).
-
-**Backend (Server):**
 ```bash
-cd server
 npm install
+npm run dev      # http://localhost:5173
 ```
 
-**Frontend (Client):**
-```bash
-cd client
-npm install
-```
+Other scripts:
 
-*(Note: If running from the root directory, ensure you navigate to each folder to install dependencies.)*
+| Command | What it does |
+|---|---|
+| `npm test` | Runs the game-logic tests (rules, engine, full bot games) |
+| `npm run lint` | ESLint |
+| `npm run build` | Production build into `dist/` |
+| `npm run preview` | Serves the production build locally |
 
-### 2. Start the Game
+## 🌐 Deploying
 
-You need to run the Server and Client in **two separate terminal windows**.
+Every push to `main` runs `.github/workflows/deploy.yml`, which tests, builds and publishes the site to GitHub Pages.
 
-**Terminal 1: Start Backend Server**
-```bash
-node server/index.js
-```
-*You should see: `Server listening on port 3000`*
-
-**Terminal 2: Start Frontend Client**
-```bash
-cd client
-npm run dev
-```
-*You should see a local URL, e.g., `http://localhost:5173/`*
-
-### 3. Play!
-Open the URL (e.g., `http://localhost:5173`) in your browser.
--   **Singleplayer**: Play against 1-3 bots.
--   **Multiplayer**: Create a room and share the **Room Code** with friends to play together on the same network/WiFi.
-
-### 4. Stopping the Game
-
-**Option A: One-Click Stop**
-Double-click the `stop_servers.bat` file in the root directory.
-
-**Option B: Manual Stop**
-Click inside each terminal window and press **Ctrl + C** to stop the process.
+One-time setup: in the GitHub repo go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
 
 ---
 
-## 📜 Game Rules
+## 📜 Rules
 
-### **Objective**
-The goal of Rummy is to be the first player to form valid combinations (Melds) with all the cards in your hand.
+- Each player gets **13 cards**. One card is turned face up as the **wildcard**, and every card of that rank is wild. If that card is a printed joker, aces are wild.
+- On your turn, **draw** one card (from the deck or the top of the discard pile), then **discard** one. You can't throw back a card you just picked from the discard pile.
+- **Sets**: 3 or 4 cards of the same rank in different suits, e.g. 7♠ 7♥ 7♣.
+- **Sequences**: 3 or more cards of the same suit in a row, e.g. 10♥ J♥ Q♥. An ace can be low (A-2-3) or high (Q-K-A), but sequences don't wrap (K-A-2).
+- **Pure sequence**: a sequence with no joker or wild card standing in for a missing card.
+- Printed jokers and wildcard-rank cards (marked **WILD**) can stand in for any card in sets and impure sequences.
+- **To win**: after drawing, press **Declare**. Your 13 cards must form valid sets and sequences, with **at least 2 sequences, at least 1 of them pure**. Card order doesn't matter, and the leftover 14th card is discarded for you.
+- With the turn timer on, running out of time before drawing skips your turn. Running out after drawing discards the card you drew.
 
-### **The Deal**
--   Each player is dealt **13 cards**.
--   The remaining cards form the **Deck** (face down).
--   One card is placed face up to start the **Discard Pile**.
--   Assessment of **Wildcards** (Jokers) is done at the start.
+## 🗂️ Code layout
 
-### **Turn Sequence**
-On your turn, you must follow this strict sequence:
+```
+src/
+  game/             Pure game logic. No React, fully unit-tested.
+    cards.js        Deck, shuffling, sorting, card helpers
+    melds.js        Meld classification and the hand solver (declaration check)
+    engine.js       Game state, actions (draw/discard/declare/reorder/timeout), per-player views
+    bot.js          Bot strategy (sees only its own player view)
+  components/       React UI (Lobby, GameTable, Hand, Card, GameOver)
+  App.jsx           Wires the engine to the UI, paces bot turns and the timer
+```
 
-1.  **DRAW**: You **must** pick one card.
-    *   From the **Deck** (Face down pile).
-    *   OR from the **Discard Pile** (Top face-up card).
-2.  **ARRANGE** (Optional):
-    *   Sort your hand using the "Sort" button.
-    *   Drag and drop cards to group them into potential sets or runs.
-3.  **DISCARD**: You **must** end your turn by discarding one card from your hand to the Discard Pile.
-
-### **Winning Combinations (Melds)**
-To win (Declare), your hand must consist entirely of valid Sets and Runs.
-
-*   **Set (Book)**: 3 or 4 cards of the **same rank** but different suits.
-    *   *Example*: 7♠ 7♥ 7♣
-*   **Run (Sequence)**: 3 or more consecutive cards of the **same suit**.
-    *   *Example*: 10♥ J♥ Q♥ K♥
-*   **Wildcards (Jokers)**:
-    *   The **Printed Joker** and the **Wildcard** selected at the start can substitute for any card in a set or run.
-
-### **Winning**
-The first player to arrange all 13 cards into valid Sets/Runs and then discard the 14th card is the winner!
-
----
-
-## ✨ Features
-
--   **Multiplayer Lobby**: Create private rooms and invite friends.
--   **Smart Deck System**: Automatically scales the number of decks based on player count (1 deck for 2-3 players, 2 decks for 4+ players).
--   **Drag & Drop**: Intuitive sorting of cards in your hand.
--   **Strict Game Flow**: The game prevents you from acting out of turn or skipping phases.
+The engine is a pure `applyAction(state, playerId, action)` function, and players only ever receive `getPlayerView(state, playerId)`. That keeps the door open for peer-to-peer multiplayer later: the host's browser would run the engine and send each player only their own view.
